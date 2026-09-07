@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using ColossalFramework.UI;
 using ICities;
 using NeuralFX.Config;
 using UnityEngine;
@@ -9,50 +10,70 @@ namespace NeuralFX.Options
 {
     internal static class OptionsPanel
     {
-        internal static void Build(UIHelperBase helper)
+        public static void Build(UIHelperBase helper)
         {
-            BuildStatusSection(helper);
-            BuildActionsSection(helper);
-            BuildPreferencesSection(helper);
-            BuildToolsSection(helper);
+            BuildStatusGroup(helper);
+            BuildActionsGroup(helper);
+            BuildPreferencesGroup(helper);
+            BuildToolsGroup(helper);
         }
 
-        private static void BuildStatusSection(UIHelperBase helper)
+        private static void BuildStatusGroup(UIHelperBase helper)
         {
-            var group = helper.AddGroup("Diagnóstico y Estado de NeuralFX");
+            var group = helper.AddGroup("Estado del Pipeline DLSS 5");
 
             bool dxgi = NativeInterop.IsModuleLoaded("dxgi.dll");
             bool feeder = NativeInterop.IsModuleLoaded("dlss5-feed.addon64");
             bool pipelineActive = dxgi && feeder;
 
-            bool cameraReady = false;
+            // Pipeline Status
+            if (pipelineActive)
+            {
+                AddStatusLabel(group, "✔ Pipeline Gráfico: ACTIVO (ReShade y DLSS5-Feeder conectados)", new Color32(78, 201, 176, 255));
+                AddNoteLabel(group, "DirectX 11 está comunicando los buffers de render al runtime neural correctamente.");
+            }
+            else if (dxgi)
+            {
+                AddStatusLabel(group, "⚠ Pipeline Gráfico: PARCIAL (Solo ReShade dxgi.dll detectado)", new Color32(245, 166, 35, 255));
+                AddNoteLabel(group, "El addon DLSS5-Feeder no está activo. Abre NeuralFX Hub para inyectar el pipeline completo.");
+            }
+            else
+            {
+                AddStatusLabel(group, "○ Pipeline Gráfico: NO INYECTADO", new Color32(200, 200, 200, 255));
+                AddNoteLabel(group, "Cierra el juego y pulsa 'Instalar Pipeline' en NeuralFX Hub para activarlo.");
+            }
+
+            AddSpacing(group, 6f);
+
+            // Camera / Motion Vectors Status
             var cam = Camera.main;
             if (cam != null)
             {
                 var wanted = DepthTextureMode.Depth | DepthTextureMode.MotionVectors;
-                cameraReady = (cam.depthTextureMode & wanted) == wanted;
+                bool cameraReady = (cam.depthTextureMode & wanted) == wanted;
+
+                if (cameraReady)
+                {
+                    AddStatusLabel(group, "✔ Vectores de Movimiento: GENERÁNDOSE CORRECTAMENTE", new Color32(78, 201, 176, 255));
+                    AddNoteLabel(group, "La cámara principal tiene activos DepthTextureMode.Depth y MotionVectors.");
+                }
+                else
+                {
+                    AddStatusLabel(group, "⚠ Vectores de Movimiento: PENDIENTE EN CÁMARA", new Color32(245, 166, 35, 255));
+                    AddNoteLabel(group, "Pulsa 'Reaplicar Configuración de Cámara' o carga una partida para forzar la activación.");
+                }
+            }
+            else
+            {
+                AddStatusLabel(group, "ℹ Vectores de Movimiento: EN ESPERA", new Color32(180, 190, 200, 255));
+                AddNoteLabel(group, "Se activarán automáticamente en la cámara principal en cuanto cargues un mapa.");
             }
 
-            // Status 1: Pipeline
-            OptionUI.AddStatusRow(
-                group,
-                "Pipeline Gráfico (DLSS / ReShade):",
-                pipelineActive ? "ACTIVO / ENLACE ESTABLE" : (dxgi ? "PARCIAL (Solo DXGI)" : "NO INYECTADO EN ESTA SESIÓN"),
-                pipelineActive,
-                pipelineActive
-                    ? "Los ganchos DX11 están transfiriendo los buffers de render al runtime de DLSS correctamente."
-                    : "Cierra el juego y usa NeuralFX Hub para inyectar el pipeline antes de iniciar Cities: Skylines.");
+            AddSpacing(group, 6f);
 
-            // Status 2: Motion Vectors
-            OptionUI.AddStatusRow(
-                group,
-                "Vectores de Movimiento:",
-                cameraReady ? "GENERÁNDOSE CORRECTAMENTE" : "EN ESPERA (Cargar mapa)",
-                cameraReady,
-                "La cámara principal tiene activos DepthTextureMode.Depth y MotionVectors para alimentar el escalador.");
-
-            // Status 3: Temporal Anti-Aliasing check
+            // Anti-Aliasing Collision Status
             bool hasConflict = false;
+            string conflictName = null;
             if (cam != null)
             {
                 foreach (var comp in cam.GetComponents<MonoBehaviour>())
@@ -64,30 +85,35 @@ namespace NeuralFX.Options
                         name.IndexOf("TAA", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         hasConflict = true;
+                        conflictName = name;
                         break;
                     }
                 }
             }
 
-            OptionUI.AddStatusRow(
-                group,
-                "Compatibilidad Temporal:",
-                !hasConflict ? "ÓPTIMA (Sin interferencias)" : "ADVERTENCIA (TAA/SMAA detectado)",
-                !hasConflict,
-                !hasConflict
-                    ? "No hay filtros de suavizado temporal ajenos compitiendo con la reconstrucción de DLSS."
-                    : "Hay un mod de suavizado temporal activo en la cámara. Desactívalo para prevenir artefactos de ghosting.");
+            if (hasConflict)
+            {
+                AddStatusLabel(group, "▲ Anti-Aliasing: CONFLICTO DETECTADO (" + conflictName + ")", new Color32(244, 71, 71, 255));
+                AddNoteLabel(group, "Desactiva el suavizado temporal del otro mod para evitar efecto de ghosting con DLSS.");
+            }
+            else
+            {
+                AddStatusLabel(group, "✔ Anti-Aliasing: COMPATIBILIDAD ÓPTIMA", new Color32(78, 201, 176, 255));
+                AddNoteLabel(group, "No se detectaron filtros temporales ajenos interfiriendo con la reconstrucción.");
+            }
         }
 
-        private static void BuildActionsSection(UIHelperBase helper)
+        private static void BuildActionsGroup(UIHelperBase helper)
         {
             var group = helper.AddGroup("Acciones Rápidas");
 
-            group.AddButton("Abrir HUD de Telemetría In-Game", () =>
+            group.AddButton("Abrir Panel de Telemetría In-Game", () =>
             {
                 NeuralFXManager.ToggleWindow();
             });
-            OptionUI.AddHint(group, "Abre el monitor flotante. Atajo: Ctrl + Alt + N, o pulsa el icono de NeuralFX en la barra Unified UI.");
+            AddNoteLabel(group, "Abre la ventana flotante en el juego (Atajo: Ctrl + Alt + N, o pulsa el icono de NeuralFX en Unified UI).");
+
+            AddSpacing(group, 4f);
 
             group.AddButton("Reaplicar Configuración de Cámara", () =>
             {
@@ -104,20 +130,20 @@ namespace NeuralFX.Options
                     }
                 }
             });
-            OptionUI.AddHint(group, "Fuerza la activación de Depth & Motion Vectors si otro mod gráfico reseteó la cámara.");
+            AddNoteLabel(group, "Vuelve a forzar los modos de profundidad y vectores si otro mod restableció la cámara.");
         }
 
-        private static void BuildPreferencesSection(UIHelperBase helper)
+        private static void BuildPreferencesGroup(UIHelperBase helper)
         {
             var group = helper.AddGroup("Preferencias");
 
-            group.AddCheckbox("Mostrar botón en la barra flotante Unified UI (UUI)", ModSettings.EnableUui, sel =>
+            group.AddCheckbox("Mostrar botón de NeuralFX en la barra Unified UI (UUI)", ModSettings.EnableUui, sel =>
             {
                 ModSettings.EnableUui = sel;
                 ModSettings.Save();
             });
 
-            group.AddCheckbox("Permitir atajo global de teclado (Ctrl + Alt + N)", ModSettings.EnableHotkey, sel =>
+            group.AddCheckbox("Habilitar atajo global de teclado (Ctrl + Alt + N)", ModSettings.EnableHotkey, sel =>
             {
                 ModSettings.EnableHotkey = sel;
                 ModSettings.Save();
@@ -136,7 +162,7 @@ namespace NeuralFX.Options
             });
         }
 
-        private static void BuildToolsSection(UIHelperBase helper)
+        private static void BuildToolsGroup(UIHelperBase helper)
         {
             var group = helper.AddGroup("Herramientas y Mantenimiento");
 
@@ -153,7 +179,7 @@ namespace NeuralFX.Options
                     }
                     else
                     {
-                        UnityEngine.Debug.LogWarning("[NeuralFX] No se encontró NeuralFX.Hub.exe en: " + hubPath);
+                        UnityEngine.Debug.LogWarning("[NeuralFX] No se encontro NeuralFX.Hub.exe en: " + hubPath);
                     }
                 }
                 catch (Exception ex)
@@ -161,9 +187,11 @@ namespace NeuralFX.Options
                     UnityEngine.Debug.LogWarning("[NeuralFX] Error iniciando Hub: " + ex.Message);
                 }
             });
-            OptionUI.AddHint(group, "Abre el panel de diagnóstico de hardware, gestor de binarios NVIDIA y rollback limpio.");
+            AddNoteLabel(group, "Abre la herramienta para diagnósticos de hardware, VRAM de 64 bits y rollback limpio a vanilla.");
 
-            group.AddButton("Abrir Carpeta de Instalación de Cities: Skylines", () =>
+            AddSpacing(group, 4f);
+
+            group.AddButton("Abrir Carpeta de Cities: Skylines", () =>
             {
                 try
                 {
@@ -175,9 +203,50 @@ namespace NeuralFX.Options
                     UnityEngine.Debug.LogWarning("[NeuralFX] Error abriendo carpeta: " + ex.Message);
                 }
             });
-            OptionUI.AddHint(group, "Ubicación de Cities.exe, dxgi.dll y los archivos de registro en vivo (ReShade.log y dlss5-feed.log).");
+            AddNoteLabel(group, "Ubicación de Cities.exe, dxgi.dll y registros de depuración (ReShade.log y dlss5-feed.log).");
 
-            OptionUI.AddLabel(group, "Atajo adicional: Pulsa la tecla [Home] durante el juego para calibrar el filtro de nitidez AMD CAS en ReShade.", new Color32(78, 201, 176, 255), 0.80f);
+            AddSpacing(group, 6f);
+            AddStatusLabel(group, "ℹ Atajo nativo: Presiona [Home] en el juego para calibrar ReShade y nitidez AMD CAS.", new Color32(78, 201, 176, 255));
+        }
+
+        private static void AddStatusLabel(UIHelperBase group, string text, Color32 color)
+        {
+            if (group is UIHelper helper && helper.self is UIPanel panel)
+            {
+                var label = panel.AddUIComponent<UILabel>();
+                label.autoSize = false;
+                label.autoHeight = true;
+                label.width = 700f;
+                label.wordWrap = true;
+                label.textScale = 0.88f;
+                label.textColor = color;
+                label.text = text;
+            }
+        }
+
+        private static void AddNoteLabel(UIHelperBase group, string text)
+        {
+            if (group is UIHelper helper && helper.self is UIPanel panel)
+            {
+                var label = panel.AddUIComponent<UILabel>();
+                label.autoSize = false;
+                label.autoHeight = true;
+                label.width = 700f;
+                label.wordWrap = true;
+                label.textScale = 0.78f;
+                label.textColor = new Color32(160, 160, 160, 255);
+                label.text = text;
+            }
+        }
+
+        private static void AddSpacing(UIHelperBase group, float height)
+        {
+            if (group is UIHelper helper && helper.self is UIPanel panel)
+            {
+                var spacer = panel.AddUIComponent<UIPanel>();
+                spacer.size = new Vector2(700f, height);
+                spacer.autoLayout = false;
+            }
         }
     }
 }
