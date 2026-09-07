@@ -95,6 +95,7 @@ namespace NeuralFX.Hub.Services
                 "dlss5-feed.log",
                 "dlss5-feed.cfg",
                 "dlss5-feed.addon64",
+                "renodx-dlss5.addon64",
                 "ReShadePreset.ini",
                 "ReShade.ini",
                 "nvngx_dlss.dll",

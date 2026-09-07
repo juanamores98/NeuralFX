@@ -36,6 +36,7 @@ namespace NeuralFX.Tests
             Assert.NotEmpty(list);
             Assert.Contains(list, d => d.Id == "reshade_addon");
             Assert.Contains(list, d => d.Id == "dlss5_feeder");
+            Assert.Contains(list, d => d.Id == "renodx_dlss5");
             Assert.Contains(list, d => d.Id == "nvngx_dlss");
         }
 
@@ -57,9 +58,11 @@ namespace NeuralFX.Tests
                 // Simulate cached binaries
                 string mockDxgi = Path.Combine(tempCacheDir, "dxgi.dll");
                 string mockFeeder = Path.Combine(tempCacheDir, "dlss5-feed.addon64");
+                string mockReno = Path.Combine(tempCacheDir, "renodx-dlss5.addon64");
                 string mockDlss = Path.Combine(tempCacheDir, "nvngx_dlss.dll");
                 await File.WriteAllTextAsync(mockDxgi, "MOCK_DXGI");
                 await File.WriteAllTextAsync(mockFeeder, "MOCK_FEEDER");
+                await File.WriteAllTextAsync(mockReno, "MOCK_RENO");
                 await File.WriteAllTextAsync(mockDlss, "MOCK_DLSS");
 
                 var depService = new DependencyManagerService();
@@ -71,6 +74,7 @@ namespace NeuralFX.Tests
                 {
                     if (dep.Id == "reshade_addon") { dep.LocalCachedPath = mockDxgi; dep.Status = DependencyStatus.InCache; }
                     if (dep.Id == "dlss5_feeder") { dep.LocalCachedPath = mockFeeder; dep.Status = DependencyStatus.InCache; }
+                    if (dep.Id == "renodx_dlss5") { dep.LocalCachedPath = mockReno; dep.Status = DependencyStatus.InCache; }
                     if (dep.Id == "nvngx_dlss") { dep.LocalCachedPath = mockDlss; dep.Status = DependencyStatus.InCache; }
                 }
 
@@ -82,6 +86,7 @@ namespace NeuralFX.Tests
                 Assert.True(File.Exists(Path.Combine(tempGameDir, "NeuralFX_Manifest.json")), "Manifiesto debe existir");
                 Assert.True(File.Exists(Path.Combine(tempGameDir, "dxgi.dll")), "dxgi.dll debe existir");
                 Assert.True(File.Exists(Path.Combine(tempGameDir, "dlss5-feed.addon64")), "dlss5-feed.addon64 debe existir");
+                Assert.True(File.Exists(Path.Combine(tempGameDir, "renodx-dlss5.addon64")), "renodx-dlss5.addon64 debe existir");
                 Assert.True(File.Exists(Path.Combine(tempGameDir, "nvngx_dlss.dll")), "nvngx_dlss.dll debe existir");
                 Assert.True(File.Exists(Path.Combine(tempGameDir, "dlss5-feed.cfg")), "dlss5-feed.cfg debe existir");
                 Assert.True(File.Exists(Path.Combine(tempGameDir, "ReShade.ini")), "ReShade.ini debe existir");
@@ -102,6 +107,7 @@ namespace NeuralFX.Tests
                 Assert.False(File.Exists(Path.Combine(tempGameDir, "NeuralFX_Manifest.json")), "Manifiesto debe borrarse");
                 Assert.False(File.Exists(Path.Combine(tempGameDir, "dxgi.dll")), "dxgi.dll debe borrarse");
                 Assert.False(File.Exists(Path.Combine(tempGameDir, "dlss5-feed.addon64")), "dlss5-feed.addon64 debe borrarse");
+                Assert.False(File.Exists(Path.Combine(tempGameDir, "renodx-dlss5.addon64")), "renodx-dlss5.addon64 debe borrarse");
                 Assert.False(File.Exists(Path.Combine(tempGameDir, "nvngx_dlss.dll")), "nvngx_dlss.dll debe borrarse");
                 Assert.False(File.Exists(Path.Combine(tempGameDir, "dlss5-feed.cfg")), "Config debe borrarse");
                 Assert.False(File.Exists(Path.Combine(tempGameDir, "ReShade.ini")), "ReShade.ini debe borrarse");

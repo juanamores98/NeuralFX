@@ -62,6 +62,21 @@ namespace NeuralFX.Hub.Services
                 },
                 new DependencyItem
                 {
+                    Id = "renodx_dlss5",
+                    DisplayName = "RenoDX DLSS 5 Neural Addon (renodx-dlss5.addon64)",
+                    Description = "Consumidor neural que ejecuta la inferencia de DLSS 5 sobre el contrato sintético de DLSS5-Feeder.",
+                    Category = DependencyCategory.Addon,
+                    TargetRelativePath = "renodx-dlss5.addon64",
+                    SourceType = "PublicDownload",
+                    DownloadUrl = "https://github.com/RankFTW/rhi-repo/releases/download/renodx-dlss5-4.70/renodx-dlss5_4.70.zip",
+                    OfficialWebUrl = "https://github.com/RankFTW/rhi-repo/releases",
+                    CanAutoDownload = true,
+                    DownloadType = "ZipExtract",
+                    ArchiveExtractFileName = "renodx-dlss5.addon64",
+                    IsRequired = true
+                },
+                new DependencyItem
+                {
                     Id = "nvngx_dlss",
                     DisplayName = "NVIDIA DLSS Super Resolution (nvngx_dlss.dll)",
                     Description = "Runtime oficial propietario de NVIDIA para reconstrucción y escalado DLSS.",
