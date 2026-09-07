@@ -88,6 +88,19 @@ namespace NeuralFX.Hub.Services
 
                         manifest.InstalledFiles.Add(item.TargetRelativePath);
                         manifest.FileChecksums[item.TargetRelativePath] = DependencyManagerService.CalculateSha256(destPath);
+
+                        // Espejo de compatibilidad para denoiser (nvngx_dlssd / nvngx_dlssnr)
+                        if (item.Id == "nvngx_dlssd")
+                        {
+                            string nrPath = Path.Combine(gameDirectory, "nvngx_dlssnr.dll");
+                            if (!File.Exists(nrPath))
+                            {
+                                File.Copy(destPath, nrPath, true);
+                                manifest.InstalledFiles.Add("nvngx_dlssnr.dll");
+                                manifest.FileChecksums["nvngx_dlssnr.dll"] = DependencyManagerService.CalculateSha256(nrPath);
+                                Log("Creado enlace de compatibilidad: nvngx_dlssnr.dll");
+                            }
+                        }
                     }
                 }
 

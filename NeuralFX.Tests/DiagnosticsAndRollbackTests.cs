@@ -148,5 +148,85 @@ namespace NeuralFX.Tests
                 if (Directory.Exists(tempGameDir)) Directory.Delete(tempGameDir, true);
             }
         }
+
+        [Fact]
+        public async Task TestDependencyManager_ZipImport_And_Metadata()
+        {
+            var depService = new DependencyManagerService();
+            var list = depService.GetInitialDependencies();
+
+            // Verify metadata
+            var reshade = list.Find(d => d.Id == "reshade_addon");
+            Assert.NotNull(reshade);
+            Assert.True(reshade.CanAutoDownload);
+            Assert.Equal("https://reshade.me/downloads", reshade.OfficialWebUrl);
+
+            var feeder = list.Find(d => d.Id == "dlss5_feeder");
+            Assert.NotNull(feeder);
+            Assert.True(feeder.CanAutoDownload);
+            Assert.Contains("DLSS5-Feeder", feeder.OfficialWebUrl);
+
+            var dlss = list.Find(d => d.Id == "nvngx_dlss");
+            Assert.NotNull(dlss);
+            Assert.False(dlss.CanAutoDownload);
+            Assert.Contains("techpowerup", dlss.OfficialWebUrl);
+
+            var dlssd = list.Find(d => d.Id == "nvngx_dlssd");
+            Assert.NotNull(dlssd);
+            Assert.False(dlssd.CanAutoDownload);
+            Assert.Contains("techpowerup", dlssd.OfficialWebUrl);
+            Assert.Contains("nvngx_dlssnr.dll", dlssd.Aliases!);
+
+            // Test Zip import
+            string tempDir = Path.Combine(Path.GetTempPath(), $"NeuralFX_ZipTest_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+            string zipPath = Path.Combine(tempDir, "mock_dlss.zip");
+
+            try
+            {
+                using (var zipStream = new FileStream(zipPath, FileMode.Create))
+                using (var archive = new System.IO.Compression.ZipArchive(zipStream, System.IO.Compression.ZipArchiveMode.Create))
+                {
+                    var entry = archive.CreateEntry("nvngx_dlss.dll");
+                    using var writer = new StreamWriter(entry.Open());
+                    writer.Write("MOCK_NVIDIA_DLSS_BINARY_CONTENT");
+                }
+
+                var mockItem = new DependencyItem
+                {
+                    Id = "nvngx_dlss",
+                    TargetRelativePath = "nvngx_dlss.dll",
+                    SourceType = "UserProvided"
+                };
+
+                bool imported = await depService.ImportFileAsync(mockItem, zipPath);
+                Assert.True(imported);
+                Assert.Equal(DependencyStatus.InCache, mockItem.Status);
+                Assert.True(File.Exists(mockItem.LocalCachedPath!));
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
+        }
+
+        [Fact]
+        public async Task TestLiveDownload_PublicDependencies()
+        {
+            var depService = new DependencyManagerService();
+            var list = depService.GetInitialDependencies();
+
+            var feeder = list.Find(d => d.Id == "dlss5_feeder");
+            Assert.NotNull(feeder);
+            bool feederOk = await depService.DownloadDependencyAsync(feeder);
+            Assert.True(feederOk, "DLSS5-Feeder debe descargarse y extraerse exitosamente");
+            Assert.True(File.Exists(Path.Combine(depService.CacheDirectory, "dlss5-feed.addon64")));
+
+            var reshade = list.Find(d => d.Id == "reshade_addon");
+            Assert.NotNull(reshade);
+            bool reshadeOk = await depService.DownloadDependencyAsync(reshade);
+            Assert.True(reshadeOk, "ReShade Add-on debe descargarse y extraerse como dxgi.dll exitosamente");
+            Assert.True(File.Exists(Path.Combine(depService.CacheDirectory, "dxgi.dll")));
+        }
     }
 }

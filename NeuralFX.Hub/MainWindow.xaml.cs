@@ -189,6 +189,84 @@ namespace NeuralFX.Hub
             }
         }
 
+        private async void BtnDownloadSingle_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is DependencyItem item)
+            {
+                btn.IsEnabled = false;
+                try
+                {
+                    LogHub($"Iniciando descarga individual: {item.DisplayName}...");
+                    bool ok = await _dependencyManager.DownloadDependencyAsync(item, LogHub);
+                    if (ok)
+                    {
+                        LogHub($"Descarga completada: {item.DisplayName}.");
+                    }
+                    else
+                    {
+                        LogHub($"Fallo en la descarga de {item.DisplayName}.");
+                    }
+                }
+                finally
+                {
+                    btn.IsEnabled = true;
+                    RefreshDependenciesList();
+                }
+            }
+        }
+
+        private void BtnOpenWebOfficial_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is DependencyItem item && !string.IsNullOrEmpty(item.OfficialWebUrl))
+            {
+                try
+                {
+                    LogHub($"Abriendo enlace web oficial: {item.OfficialWebUrl}");
+                    Process.Start(new ProcessStartInfo(item.OfficialWebUrl) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    LogHub($"Error abriendo navegador: {ex.Message}");
+                }
+            }
+        }
+
+        private async void BtnDownloadAllPublic_Click(object sender, RoutedEventArgs e)
+        {
+            BtnDownloadAllPublic.IsEnabled = false;
+            try
+            {
+                LogHub("Iniciando descarga por lotes de componentes públicos (ReShade + DLSS5-Feeder)...");
+                int downloaded = await _dependencyManager.DownloadAllPublicMissingAsync(_dependencies, LogHub);
+                LogHub($"Proceso completado. Se descargaron {downloaded} componentes.");
+                RefreshDependenciesList();
+                if (downloaded > 0)
+                {
+                    MessageBox.Show($"Se descargaron e integraron exitosamente {downloaded} componentes públicos en la caché.", "Descarga Exitosa", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show("Todos los componentes públicos ya se encuentran en la caché o instalados.", "Información", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHub($"Error en descarga por lotes: {ex.Message}");
+            }
+            finally
+            {
+                BtnDownloadAllPublic.IsEnabled = true;
+            }
+        }
+
+        private void BtnAutoDetectDownloads_Click(object sender, RoutedEventArgs e)
+        {
+            LogHub("Buscando binarios y archivos ZIP en la carpeta de Descargas del usuario...");
+            _dependencyManager.AutoDetectAndImportFromDownloads(_dependencies, LogHub);
+            RefreshDependenciesList();
+            MessageBox.Show("Escaneo de la carpeta de Descargas finalizado. Revisa la lista de dependencias para verificar los elementos cargados en caché.", "Auto-detección Completada", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
         private async void BtnImportDependency_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn && btn.Tag is DependencyItem item)
@@ -196,7 +274,7 @@ namespace NeuralFX.Hub
                 var dlg = new OpenFileDialog
                 {
                     Title = $"Importar archivo para {item.DisplayName}",
-                    Filter = $"{Path.GetFileName(item.TargetRelativePath)}|{Path.GetFileName(item.TargetRelativePath)}|Archivos de biblioteca (*.dll)|*.dll|Todos los archivos (*.*)|*.*",
+                    Filter = "Archivos compatibles (*.dll;*.zip;*.exe)|*.dll;*.zip;*.exe|Librerías DLL (*.dll)|*.dll|Archivos ZIP (*.zip)|*.zip|Todos los archivos (*.*)|*.*",
                     InitialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads")
                 };
 

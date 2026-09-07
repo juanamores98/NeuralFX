@@ -99,6 +99,8 @@ namespace NeuralFX.Hub.Services
                 "ReShade.ini",
                 "nvngx_dlss.dll",
                 "nvngx_dlssnr.dll",
+                "nvngx_dlssd.dll",
+                "nvngx_dlssg.dll",
                 "Verify-DLSS5Feeder.ps1"
             };
 

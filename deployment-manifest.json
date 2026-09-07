@@ -1,0 +1,63 @@
+﻿{
+    "files":  [
+                  {
+                      "path":  "Iniciar-NeuralFX-Hub.bat",
+                      "sha256":  "13fd7d64504319a0dd115aa78cb47527725dc7543618d6f1b8fdc555a8d9503e",
+                      "bytes":  296
+                  },
+                  {
+                      "path":  "LICENSE",
+                      "sha256":  "2be8d7e112f80babc84cd4d5d71497562d6612780f16c26a9df457c9ac240fe1",
+                      "bytes":  907
+                  },
+                  {
+                      "path":  "NeuralFX.dll",
+                      "sha256":  "9dd4c2806c9fd4b83ac297ea5e5576d4d91cf3e42a17d058b987959a268966c0",
+                      "bytes":  24576
+                  },
+                  {
+                      "path":  "NOTICE",
+                      "sha256":  "6103d588795a68e47b68a5ed515c0a922b4fde9e815dbfe664906e450393fc05",
+                      "bytes":  678
+                  },
+                  {
+                      "path":  "README.md",
+                      "sha256":  "9f56896480ab216cce5b61aca17d58716cf8ec9f4407fb9ea8bc795b3613519a",
+                      "bytes":  6015
+                  },
+                  {
+                      "path":  "Hub/NeuralFX.Hub.deps.json",
+                      "sha256":  "dcbeacecc79dba55e5d874ae1d3b6a8702b7d9a3a715548bbbb2dffed210822b",
+                      "bytes":  1112
+                  },
+                  {
+                      "path":  "Hub/NeuralFX.Hub.dll",
+                      "sha256":  "091e50832d8eaa20ccdd7fea12a4af9ac6434c72bd7b7fdc0045a88d77c78705",
+                      "bytes":  89600
+                  },
+                  {
+                      "path":  "Hub/NeuralFX.Hub.exe",
+                      "sha256":  "a2f8632cf82e48b0902ebcce366bff4def3413ddf86929ae1d9ab18330aa7a25",
+                      "bytes":  151552
+                  },
+                  {
+                      "path":  "Hub/NeuralFX.Hub.pdb",
+                      "sha256":  "6837ea4a3f632a94d3b99133207c911bce6469f89e714ca7c6ab0e8e68b035ff",
+                      "bytes":  36332
+                  },
+                  {
+                      "path":  "Hub/NeuralFX.Hub.runtimeconfig.json",
+                      "sha256":  "73b37384bb001e78db2014d328750eb2990393712fd63cd00c0f41965b3dbe96",
+                      "bytes":  429
+                  },
+                  {
+                      "path":  "Hub/System.Management.dll",
+                      "sha256":  "b2d6e7e991dc9ef154b29f4966f04fd8ed4ebb2c1d1242ea1d5f3e90f8ae5143",
+                      "bytes":  311984
+                  }
+              ],
+    "author":  "juanamores98",
+    "purpose":  "NeuralFX Official Distribution Package for Cities: Skylines 1 (v2)",
+    "version":  "1.0.0",
+    "createdUtc":  "2026-09-07T06:35:04.2549123Z"
+}
