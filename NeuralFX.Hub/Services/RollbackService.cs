@@ -28,16 +28,15 @@ namespace NeuralFX.Hub.Services
             }
 
             string manifestPath = Path.Combine(gameDirectory, "NeuralFX_Manifest.json");
-            bool hadManifest = false;
+            InstallationManifest? manifest = null;
 
             if (File.Exists(manifestPath))
             {
-                hadManifest = true;
                 try
                 {
                     Log("Leyendo manifiesto oficial NeuralFX_Manifest.json...");
                     string json = await File.ReadAllTextAsync(manifestPath);
-                    var manifest = JsonSerializer.Deserialize<InstallationManifest>(json);
+                    manifest = JsonSerializer.Deserialize<InstallationManifest>(json);
 
                     if (manifest != null)
                     {
@@ -122,9 +121,10 @@ namespace NeuralFX.Hub.Services
                 }
             }
 
-            // Si no había backup de dxgi.dll y dxgi.dll sigue ahí, checar si se elimina
+            // Si no había backup legítimo previo de dxgi.dll y dxgi.dll sigue ahí, eliminarlo
             string dxgi = Path.Combine(gameDirectory, "dxgi.dll");
-            if (File.Exists(dxgi) && hadManifest)
+            bool isRestoredBackup = manifest != null && manifest.BackedUpFiles.ContainsKey("dxgi.dll");
+            if (File.Exists(dxgi) && !isRestoredBackup)
             {
                 try
                 {
@@ -166,11 +166,30 @@ namespace NeuralFX.Hub.Services
                 }
             }
 
-            // Verificación final de estado vanilla
-            bool isVanilla = !File.Exists(Path.Combine(gameDirectory, "dlss5-feed.addon64"))
-                          && !File.Exists(Path.Combine(gameDirectory, "dlss5-feed.cfg"))
-                          && !File.Exists(Path.Combine(gameDirectory, "ReShade.ini"))
-                          && !Directory.Exists(Path.Combine(gameDirectory, "reshade-shaders"));
+            // Verificación exhaustiva final de estado vanilla
+            bool remainingDxgi = File.Exists(Path.Combine(gameDirectory, "dxgi.dll")) && !isRestoredBackup;
+            bool remainingFeeder = File.Exists(Path.Combine(gameDirectory, "dlss5-feed.addon64"));
+            bool remainingReno = File.Exists(Path.Combine(gameDirectory, "renodx-dlss5.addon64"));
+            bool remainingDlss = File.Exists(Path.Combine(gameDirectory, "nvngx_dlss.dll"));
+            bool remainingDlssd = File.Exists(Path.Combine(gameDirectory, "nvngx_dlssd.dll"));
+            bool remainingDlssnr = File.Exists(Path.Combine(gameDirectory, "nvngx_dlssnr.dll"));
+            bool remainingCfg = File.Exists(Path.Combine(gameDirectory, "dlss5-feed.cfg"));
+            bool remainingIni = File.Exists(Path.Combine(gameDirectory, "ReShade.ini"));
+            bool remainingPreset = File.Exists(Path.Combine(gameDirectory, "ReShadePreset.ini"));
+            bool remainingManifest = File.Exists(Path.Combine(gameDirectory, "NeuralFX_Manifest.json"));
+            bool remainingShaders = Directory.Exists(Path.Combine(gameDirectory, "reshade-shaders"));
+
+            bool isVanilla = !remainingDxgi
+                          && !remainingFeeder
+                          && !remainingReno
+                          && !remainingDlss
+                          && !remainingDlssd
+                          && !remainingDlssnr
+                          && !remainingCfg
+                          && !remainingIni
+                          && !remainingPreset
+                          && !remainingManifest
+                          && !remainingShaders;
 
             if (isVanilla)
             {
@@ -178,7 +197,12 @@ namespace NeuralFX.Hub.Services
             }
             else
             {
-                Log(">> ADVERTENCIA: Quedan archivos o carpetas detectadas.");
+                Log(">> ADVERTENCIA: Quedan archivos o carpetas detectadas en el juego:");
+                if (remainingDxgi) Log("   - dxgi.dll");
+                if (remainingFeeder) Log("   - dlss5-feed.addon64");
+                if (remainingReno) Log("   - renodx-dlss5.addon64");
+                if (remainingDlss) Log("   - nvngx_dlss.dll");
+                if (remainingShaders) Log("   - reshade-shaders/");
             }
 
             return isVanilla;

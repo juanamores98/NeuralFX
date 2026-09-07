@@ -28,6 +28,8 @@ namespace NeuralFX.Hub.Models
         private bool _isDownloading = false;
         private string? _localCachedPath;
         private long _fileSize;
+        private bool _isInGame = false;
+        private bool _isInCache = false;
 
         public string Id { get; set; } = string.Empty;
         public string DisplayName { get; set; } = string.Empty;
@@ -59,6 +61,42 @@ namespace NeuralFX.Hub.Models
             }
         }
 
+        public bool IsInGame
+        {
+            get => _isInGame;
+            set
+            {
+                if (_isInGame != value)
+                {
+                    _isInGame = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(GameStatusText));
+                    OnPropertyChanged(nameof(GameStatusFg));
+                    OnPropertyChanged(nameof(GameStatusBg));
+                    OnPropertyChanged(nameof(GameStatusBorder));
+                }
+            }
+        }
+
+        public bool IsInCache
+        {
+            get => _isInCache;
+            set
+            {
+                if (_isInCache != value)
+                {
+                    _isInCache = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(CacheStatusText));
+                    OnPropertyChanged(nameof(CacheStatusFg));
+                    OnPropertyChanged(nameof(CacheStatusBg));
+                    OnPropertyChanged(nameof(CacheStatusBorder));
+                    OnPropertyChanged(nameof(CanDownload));
+                    OnPropertyChanged(nameof(IsReady));
+                }
+            }
+        }
+
         public string? LocalCachedPath
         {
             get => _localCachedPath;
@@ -81,6 +119,7 @@ namespace NeuralFX.Hub.Models
                 {
                     _fileSize = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(CacheStatusText));
                 }
             }
         }
@@ -115,11 +154,61 @@ namespace NeuralFX.Hub.Models
         public bool IsRequired { get; set; } = true;
 
         // UI Helpers
-        public bool CanDownload => CanAutoDownload && Status == DependencyStatus.Missing && !IsDownloading;
+        public bool CanDownload => CanAutoDownload && !IsInCache && !IsDownloading;
         public bool HasOfficialWeb => !string.IsNullOrEmpty(OfficialWebUrl);
         public bool CanImport => SourceType != "Embedded";
         public bool IsEmbedded => SourceType == "Embedded";
-        public bool IsReady => Status == DependencyStatus.InCache || Status == DependencyStatus.InstalledInGame;
+        public bool IsReady => IsInCache || IsInGame;
+
+        // Visual Presentation Badges
+        public string GameStatusText => IsInGame ? "● INYECTADO EN JUEGO" : "○ NO INYECTADO (Vanilla)";
+        public string GameStatusFg => IsInGame ? "#4EC9B0" : "#888888";
+        public string GameStatusBg => IsInGame ? "#1B382B" : "#252528";
+        public string GameStatusBorder => IsInGame ? "#2E5A44" : "#38383C";
+
+        public string CacheStatusText
+        {
+            get
+            {
+                if (IsEmbedded) return "✓ Integrado en Mod";
+                if (IsInCache)
+                {
+                    double mb = FileSize / (1024.0 * 1024.0);
+                    return mb >= 0.1 ? $"✓ En Caché ({mb:F1} MB)" : "✓ En Caché (< 0.1 MB)";
+                }
+                return CanAutoDownload ? "⚠ Disponible para Descarga" : "⚠ Requiere Binario Oficial";
+            }
+        }
+
+        public string CacheStatusFg
+        {
+            get
+            {
+                if (IsEmbedded) return "#4EC9B0";
+                if (IsInCache) return "#569CD6";
+                return "#CE9178";
+            }
+        }
+
+        public string CacheStatusBg
+        {
+            get
+            {
+                if (IsEmbedded) return "#1E3A20";
+                if (IsInCache) return "#1C2B38";
+                return "#38251C";
+            }
+        }
+
+        public string CacheStatusBorder
+        {
+            get
+            {
+                if (IsEmbedded) return "#2E5A35";
+                if (IsInCache) return "#284A64";
+                return "#553828";
+            }
+        }
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)

@@ -234,5 +234,46 @@ namespace NeuralFX.Tests
             Assert.True(reshadeOk, "ReShade Add-on debe descargarse y extraerse como dxgi.dll exitosamente");
             Assert.True(File.Exists(Path.Combine(depService.CacheDirectory, "dxgi.dll")));
         }
+
+        [Fact]
+        public void TestDependencyItem_TwoTierStatusAndVisualBadges()
+        {
+            var item = new DependencyItem
+            {
+                Id = "nvngx_dlss",
+                DisplayName = "NVIDIA DLSS",
+                TargetRelativePath = "nvngx_dlss.dll",
+                CanAutoDownload = false,
+                FileSize = 31 * 1024 * 1024
+            };
+
+            // Initial: neither in game nor in cache
+            item.IsInGame = false;
+            item.IsInCache = false;
+            Assert.Equal("○ NO INYECTADO (Vanilla)", item.GameStatusText);
+            Assert.Equal("#888888", item.GameStatusFg);
+            Assert.Equal("⚠ Requiere Binario Oficial", item.CacheStatusText);
+
+            // In Cache but NOT in game
+            item.IsInCache = true;
+            Assert.Equal("○ NO INYECTADO (Vanilla)", item.GameStatusText);
+            Assert.Contains("En Caché", item.CacheStatusText);
+            Assert.Equal("#569CD6", item.CacheStatusFg);
+
+            // Installed in Game AND in cache
+            item.IsInGame = true;
+            Assert.Equal("● INYECTADO EN JUEGO", item.GameStatusText);
+            Assert.Equal("#4EC9B0", item.GameStatusFg);
+
+            // Embedded item
+            var embedded = new DependencyItem
+            {
+                Id = "reshade_preset",
+                SourceType = "Embedded",
+                Category = DependencyCategory.Config
+            };
+            Assert.Equal("✓ Integrado en Mod", embedded.CacheStatusText);
+            Assert.Equal("#4EC9B0", embedded.CacheStatusFg);
+        }
     }
 }

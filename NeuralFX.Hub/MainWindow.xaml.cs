@@ -215,13 +215,42 @@ namespace NeuralFX.Hub
             }
         }
 
+        private void BtnOpenDownloads_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string userDownloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                if (Directory.Exists(userDownloads))
+                {
+                    LogHub($"Abriendo carpeta de Descargas: {userDownloads}");
+                    Process.Start(new ProcessStartInfo("explorer.exe", userDownloads) { UseShellExecute = true });
+                }
+                else
+                {
+                    MessageBox.Show("No se encontró la carpeta de Descargas del usuario.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHub($"Error abriendo carpeta de Descargas: {ex.Message}");
+            }
+        }
+
         private void BtnOpenWebOfficial_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn && btn.Tag is DependencyItem item && !string.IsNullOrEmpty(item.OfficialWebUrl))
             {
                 try
                 {
-                    LogHub($"Abriendo enlace web oficial: {item.OfficialWebUrl}");
+                    if (item.Category == DependencyCategory.NvidiaProprietary)
+                    {
+                        LogHub($"[GUÍA NVIDIA] Abriendo enlace oficial: {item.OfficialWebUrl}");
+                        LogHub("Consejo: Descarga la DLL o ZIP y guárdalo en tu carpeta 'Descargas'. NeuralFX Hub lo detectará automáticamente.");
+                    }
+                    else
+                    {
+                        LogHub($"Abriendo enlace web oficial: {item.OfficialWebUrl}");
+                    }
                     Process.Start(new ProcessStartInfo(item.OfficialWebUrl) { UseShellExecute = true });
                 }
                 catch (Exception ex)

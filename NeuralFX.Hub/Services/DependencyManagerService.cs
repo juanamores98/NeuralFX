@@ -143,32 +143,27 @@ namespace NeuralFX.Hub.Services
 
             foreach (var item in items)
             {
-                // 1. Check if installed in game
-                if (!string.IsNullOrEmpty(gameDirectory))
+                // 1. Check if physically installed in game directory
+                bool installedInGame = false;
+                if (!string.IsNullOrEmpty(gameDirectory) && Directory.Exists(gameDirectory))
                 {
                     string inGamePath = Path.Combine(gameDirectory, item.TargetRelativePath);
-                    bool installed = File.Exists(inGamePath) || Directory.Exists(inGamePath);
+                    installedInGame = File.Exists(inGamePath) || Directory.Exists(inGamePath);
 
-                    if (!installed && item.Aliases != null)
+                    if (!installedInGame && item.Aliases != null)
                     {
                         foreach (var alias in item.Aliases)
                         {
                             string aliasGamePath = Path.Combine(gameDirectory, alias);
                             if (File.Exists(aliasGamePath))
                             {
-                                installed = true;
+                                installedInGame = true;
                                 break;
                             }
                         }
                     }
-
-                    if (installed)
-                    {
-                        item.Status = DependencyStatus.InstalledInGame;
-                        item.StatusMessage = "Inyectado en juego";
-                        continue;
-                    }
                 }
+                item.IsInGame = installedInGame;
 
                 // 2. Check in Local Cache
                 string cachedPath = Path.Combine(CacheDirectory, Path.GetFileName(item.TargetRelativePath));
@@ -191,29 +186,33 @@ namespace NeuralFX.Hub.Services
                     }
                 }
 
+                if (item.Category == DependencyCategory.Config || item.Category == DependencyCategory.Shaders)
+                {
+                    item.IsInCache = true;
+                    item.Status = installedInGame ? DependencyStatus.InstalledInGame : DependencyStatus.InCache;
+                    item.StatusMessage = installedInGame ? "Inyectado en juego" : "Generado dinámicamente";
+                    continue;
+                }
+
                 if (effectiveCachedPath != null)
                 {
                     var fileInfo = new FileInfo(effectiveCachedPath);
                     item.LocalCachedPath = effectiveCachedPath;
                     item.FileSize = fileInfo.Length;
-                    item.Status = DependencyStatus.InCache;
-                    item.StatusMessage = $"En caché ({fileInfo.Length / (1024 * 1024):N1} MB)";
+                    item.IsInCache = true;
+                    item.Status = installedInGame ? DependencyStatus.InstalledInGame : DependencyStatus.InCache;
+                    item.StatusMessage = installedInGame ? "Inyectado en juego" : $"En caché ({fileInfo.Length / (1024.0 * 1024.0):F1} MB)";
                     continue;
                 }
 
-                // 3. Embedded or generated configs are always ready
-                if (item.Category == DependencyCategory.Config || item.Category == DependencyCategory.Shaders)
-                {
-                    item.Status = DependencyStatus.InCache;
-                    item.StatusMessage = "Generado dinámicamente";
-                    continue;
-                }
-
-                // Default missing
-                item.Status = DependencyStatus.Missing;
-                item.StatusMessage = item.CanAutoDownload
-                    ? "Disponible para descarga directa"
-                    : (item.Category == DependencyCategory.NvidiaProprietary ? "Requiere DLL oficial (TechPowerUp)" : "No descargado");
+                // Default missing from cache
+                item.IsInCache = false;
+                item.Status = installedInGame ? DependencyStatus.InstalledInGame : DependencyStatus.Missing;
+                item.StatusMessage = installedInGame
+                    ? "Inyectado en juego"
+                    : (item.CanAutoDownload
+                        ? "Disponible para descarga directa"
+                        : (item.Category == DependencyCategory.NvidiaProprietary ? "Requiere DLL oficial (TechPowerUp)" : "No descargado"));
             }
         }
 
@@ -227,12 +226,12 @@ namespace NeuralFX.Hub.Services
 
             foreach (var item in items)
             {
-                if (item.Status == DependencyStatus.InCache || item.Status == DependencyStatus.InstalledInGame)
+                if (item.IsInCache)
                     continue;
 
                 string cachedPath = Path.Combine(CacheDirectory, Path.GetFileName(item.TargetRelativePath));
 
-                // 1. Direct DLL match in Downloads
+                // 1. Direct DLL / File match in Downloads
                 string directFile = Path.Combine(userDownloads, item.TargetRelativePath);
                 if (File.Exists(directFile))
                 {
@@ -242,8 +241,9 @@ namespace NeuralFX.Hub.Services
                         var fi = new FileInfo(cachedPath);
                         item.LocalCachedPath = cachedPath;
                         item.FileSize = fi.Length;
+                        item.IsInCache = true;
                         item.Status = DependencyStatus.InCache;
-                        item.StatusMessage = $"Importado desde Descargas ({fi.Length / (1024 * 1024):N1} MB)";
+                        item.StatusMessage = $"Importado desde Descargas ({fi.Length / (1024.0 * 1024.0):F1} MB)";
                         LogMsg($"Auto-detectado e importado desde Descargas: {Path.GetFileName(directFile)}");
                         continue;
                     }
@@ -253,7 +253,46 @@ namespace NeuralFX.Hub.Services
                     }
                 }
 
-                // 2. Check Aliases in Downloads
+                // 2. Check DLL pattern / copy variants (e.g. "nvngx_dlss (1).dll")
+                try
+                {
+                    string baseNameNoExt = Path.GetFileNameWithoutExtension(item.TargetRelativePath);
+                    var matchingDlls = Directory.GetFiles(userDownloads, "*.dll");
+                    bool matchedPattern = false;
+
+                    foreach (var candidateDll in matchingDlls)
+                    {
+                        string fname = Path.GetFileName(candidateDll).ToLowerInvariant();
+                        bool matches = false;
+
+                        if (item.Id == "nvngx_dlss" && fname.StartsWith("nvngx_dlss") && !fname.Contains("dlssd") && !fname.Contains("dlssnr") && !fname.Contains("dlssg"))
+                            matches = true;
+                        else if (item.Id == "nvngx_dlssd" && (fname.StartsWith("nvngx_dlssd") || fname.StartsWith("nvngx_dlssnr")))
+                            matches = true;
+
+                        if (matches)
+                        {
+                            File.Copy(candidateDll, cachedPath, true);
+                            var fi = new FileInfo(cachedPath);
+                            item.LocalCachedPath = cachedPath;
+                            item.FileSize = fi.Length;
+                            item.IsInCache = true;
+                            item.Status = DependencyStatus.InCache;
+                            item.StatusMessage = $"Importado desde Descargas ({fi.Length / (1024.0 * 1024.0):F1} MB)";
+                            LogMsg($"Auto-detectado e importado variante DLL: {Path.GetFileName(candidateDll)}");
+                            matchedPattern = true;
+                            break;
+                        }
+                    }
+
+                    if (matchedPattern) continue;
+                }
+                catch
+                {
+                    // Ignore search errors
+                }
+
+                // 3. Check Aliases in Downloads
                 if (item.Aliases != null)
                 {
                     bool importedAlias = false;
@@ -268,8 +307,9 @@ namespace NeuralFX.Hub.Services
                                 var fi = new FileInfo(cachedPath);
                                 item.LocalCachedPath = cachedPath;
                                 item.FileSize = fi.Length;
+                                item.IsInCache = true;
                                 item.Status = DependencyStatus.InCache;
-                                item.StatusMessage = $"Importado desde Descargas ({fi.Length / (1024 * 1024):N1} MB)";
+                                item.StatusMessage = $"Importado desde Descargas ({fi.Length / (1024.0 * 1024.0):F1} MB)";
                                 LogMsg($"Auto-detectado alias e importado: {alias}");
                                 importedAlias = true;
                                 break;
@@ -283,7 +323,35 @@ namespace NeuralFX.Hub.Services
                     if (importedAlias) continue;
                 }
 
-                // 3. Check ZIP archives in Downloads (e.g. nvngx_dlss_*.zip)
+                // 4. Check ReShade installer executable in Downloads
+                if (item.Id == "reshade_addon")
+                {
+                    try
+                    {
+                        var exeFiles = Directory.GetFiles(userDownloads, "*ReShade*.exe");
+                        foreach (var exePath in exeFiles)
+                        {
+                            if (ExtractReShade64FromSetup(exePath, cachedPath, LogMsg))
+                            {
+                                var fi = new FileInfo(cachedPath);
+                                item.LocalCachedPath = cachedPath;
+                                item.FileSize = fi.Length;
+                                item.IsInCache = true;
+                                item.Status = DependencyStatus.InCache;
+                                item.StatusMessage = $"Extraído de ReShade Setup ({fi.Length / (1024.0 * 1024.0):F1} MB)";
+                                LogMsg($"Auto-detectado instalador ReShade en Descargas y extraído dxgi.dll exitosamente.");
+                                break;
+                            }
+                        }
+                        if (item.IsInCache) continue;
+                    }
+                    catch
+                    {
+                        // Ignore exe scan errors
+                    }
+                }
+
+                // 5. Check ZIP archives in Downloads (e.g. nvidia-dlss-*.zip, nvngx_dlss_*.zip)
                 try
                 {
                     var zipFiles = Directory.GetFiles(userDownloads, "*.zip");
@@ -292,12 +360,28 @@ namespace NeuralFX.Hub.Services
                         string zipName = Path.GetFileName(zipPath).ToLowerInvariant();
                         bool matchZip = false;
 
-                        if (item.Id == "nvngx_dlss" && zipName.Contains("dlss") && !zipName.Contains("feeder") && !zipName.Contains("g") && !zipName.Contains("d"))
-                            matchZip = true;
+                        if (item.Id == "nvngx_dlss")
+                        {
+                            bool isDlssG = zipName.Contains("dlssg") || zipName.Contains("dlss_g") || zipName.Contains("framegen") || zipName.Contains("frame-generation");
+                            bool isDlssD = zipName.Contains("dlssd") || zipName.Contains("dlss_d") || zipName.Contains("dlssnr") || zipName.Contains("ray") || zipName.Contains("reconstruction");
+                            bool isFeeder = zipName.Contains("feeder");
+                            if ((zipName.Contains("dlss") || zipName.Contains("nvngx")) && !isDlssG && !isDlssD && !isFeeder)
+                            {
+                                matchZip = true;
+                            }
+                        }
                         else if (item.Id == "nvngx_dlssd" && (zipName.Contains("ray") || zipName.Contains("dlssd") || zipName.Contains("dlssnr") || zipName.Contains("reconstruction")))
+                        {
                             matchZip = true;
-                        else if (item.Id == "dlss5_feeder" && zipName.Contains("dlss5-feeder"))
+                        }
+                        else if (item.Id == "dlss5_feeder" && zipName.Contains("feeder"))
+                        {
                             matchZip = true;
+                        }
+                        else if (item.Id == "renodx_dlss5" && (zipName.Contains("renodx") || zipName.Contains("rhi")))
+                        {
+                            matchZip = true;
+                        }
 
                         if (matchZip)
                         {
@@ -307,8 +391,9 @@ namespace NeuralFX.Hub.Services
                                 var fi = new FileInfo(cachedPath);
                                 item.LocalCachedPath = cachedPath;
                                 item.FileSize = fi.Length;
+                                item.IsInCache = true;
                                 item.Status = DependencyStatus.InCache;
-                                item.StatusMessage = $"Extraído desde {Path.GetFileName(zipPath)} ({fi.Length / (1024 * 1024):N1} MB)";
+                                item.StatusMessage = $"Extraído de {Path.GetFileName(zipPath)} ({fi.Length / (1024.0 * 1024.0):F1} MB)";
                                 LogMsg($"Extraído automáticamente desde archivo comprimido: {Path.GetFileName(zipPath)} -> {Path.GetFileName(cachedPath)}");
                                 break;
                             }

@@ -39,8 +39,8 @@ namespace NeuralFX.Options
             }
             else
             {
-                AddStatusLabel(group, "○ Pipeline Gráfico: NO INYECTADO", new Color32(200, 200, 200, 255));
-                AddNoteLabel(group, "Cierra el juego y pulsa 'Instalar Pipeline' en NeuralFX Hub para activarlo.");
+                AddStatusLabel(group, "○ Pipeline Gráfico: NO INYECTADO (Modo Vanilla Limpio)", new Color32(180, 190, 200, 255));
+                AddNoteLabel(group, "El juego se encuentra en estado original vanilla sin hooks inyectados. Abre NeuralFX Hub si deseas instalar el pipeline DLSS 5.");
             }
 
             AddSpacing(group, 6f);

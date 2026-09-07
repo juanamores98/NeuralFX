@@ -162,10 +162,14 @@ namespace NeuralFX
             GUILayout.Label("Estado del Pipeline Gráfico Nativo:", UnityEditorStylesLikeBold());
 
             // Hooks status
-            string dxgiStatus = _isDxgiHooked ? "<color=#4EC9B0>[ACTIVO] ReShade DXGI Hook</color>" : "<color=#F44747>[NO DETECTADO] dxgi.dll</color>";
+            string dxgiStatus = _isDxgiHooked 
+                ? "<color=#4EC9B0>[ACTIVO] ReShade DXGI Hook</color>" 
+                : "<color=#888888>[NO INYECTADO] ReShade Hook (Vanilla Limpio)</color>";
             GUILayout.Label(dxgiStatus, RichTextLabel());
 
-            string feederStatus = _isFeederHooked ? "<color=#4EC9B0>[ACTIVO] DLSS5-Feeder Addon</color>" : "<color=#CE9178>[PENDIENTE] dlss5-feed.addon64</color>";
+            string feederStatus = _isFeederHooked 
+                ? "<color=#4EC9B0>[ACTIVO] DLSS5-Feeder Addon</color>" 
+                : "<color=#888888>[NO INYECTADO] dlss5-feed.addon64 (Vanilla)</color>";
             GUILayout.Label(feederStatus, RichTextLabel());
 
             GUILayout.Space(8);
