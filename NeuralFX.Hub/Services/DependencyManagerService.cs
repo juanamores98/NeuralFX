@@ -39,7 +39,7 @@ namespace NeuralFX.Hub.Services
                     TargetRelativePath = "dxgi.dll",
                     SourceType = "PublicDownload",
                     DownloadUrl = "https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe",
-                    OfficialWebUrl = "https://reshade.me/downloads",
+                    OfficialWebUrl = "https://reshade.me/#download",
                     CanAutoDownload = true,
                     DownloadType = "ReShadeExeExtract",
                     ArchiveExtractFileName = "ReShade64.dll",

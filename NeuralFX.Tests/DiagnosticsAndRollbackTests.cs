@@ -159,7 +159,7 @@ namespace NeuralFX.Tests
             var reshade = list.Find(d => d.Id == "reshade_addon");
             Assert.NotNull(reshade);
             Assert.True(reshade.CanAutoDownload);
-            Assert.Equal("https://reshade.me/downloads", reshade.OfficialWebUrl);
+            Assert.Equal("https://reshade.me/#download", reshade.OfficialWebUrl);
 
             var feeder = list.Find(d => d.Id == "dlss5_feeder");
             Assert.NotNull(feeder);
