@@ -316,7 +316,7 @@ namespace NeuralFX.Hub
             Dispatcher.Invoke(() =>
             {
                 _hubLogs.AppendLine(message);
-                if (RadioLogHub.IsChecked == true)
+                if (RadioLogHub != null && RadioLogHub.IsChecked == true && TxtLogConsole != null)
                 {
                     TxtLogConsole.Text = _hubLogs.ToString();
                     TxtLogConsole.ScrollToEnd();
@@ -326,15 +326,16 @@ namespace NeuralFX.Hub
 
         private void LiveLogTimer_Tick(object? sender, EventArgs e)
         {
+            if (TxtLogConsole == null) return;
             if (!_hardwareInfo.GameFound) return;
             string gameDir = Path.GetDirectoryName(_hardwareInfo.GameExePath)!;
 
-            if (RadioLogReShade.IsChecked == true)
+            if (RadioLogReShade != null && RadioLogReShade.IsChecked == true)
             {
                 string path = Path.Combine(gameDir, "ReShade.log");
                 ReadLogFileSafe(path);
             }
-            else if (RadioLogFeeder.IsChecked == true)
+            else if (RadioLogFeeder != null && RadioLogFeeder.IsChecked == true)
             {
                 string path = Path.Combine(gameDir, "dlss5-feed.log");
                 ReadLogFileSafe(path);
@@ -343,6 +344,8 @@ namespace NeuralFX.Hub
 
         private void ReadLogFileSafe(string path)
         {
+            if (TxtLogConsole == null) return;
+
             if (!File.Exists(path))
             {
                 TxtLogConsole.Text = $"[Archivo {Path.GetFileName(path)} no encontrado en {Path.GetDirectoryName(path)}]";
@@ -365,9 +368,11 @@ namespace NeuralFX.Hub
 
         private void RadioLog_Checked(object sender, RoutedEventArgs e)
         {
+            if (RadioLogHub == null || TxtLogConsole == null) return;
+
             if (RadioLogHub.IsChecked == true)
             {
-                TxtLogConsole.Text = _hubLogs.ToString();
+                TxtLogConsole.Text = _hubLogs?.ToString() ?? string.Empty;
                 TxtLogConsole.ScrollToEnd();
             }
             else
@@ -378,7 +383,9 @@ namespace NeuralFX.Hub
 
         private void BtnClearLog_Click(object sender, RoutedEventArgs e)
         {
-            if (RadioLogHub.IsChecked == true)
+            if (TxtLogConsole == null) return;
+
+            if (RadioLogHub != null && RadioLogHub.IsChecked == true)
             {
                 _hubLogs.Clear();
                 TxtLogConsole.Text = string.Empty;
