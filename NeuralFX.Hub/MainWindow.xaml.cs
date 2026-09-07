@@ -109,11 +109,23 @@ namespace NeuralFX.Hub
                 TxtWritePerm.Foreground = _hardwareInfo.CanWriteGameDir 
                     ? (SolidColorBrush)FindResource("Success") 
                     : (SolidColorBrush)FindResource("Danger");
+
+                if (_hardwareInfo.IsGameRunning)
+                {
+                    TxtGameProcess.Text = "EN EJECUCIÓN (Cierra el juego antes de inyectar/desinstalar)";
+                    TxtGameProcess.Foreground = (SolidColorBrush)FindResource("Danger");
+                }
+                else
+                {
+                    TxtGameProcess.Text = "CERRADO (Listo para inyección o rollback)";
+                    TxtGameProcess.Foreground = (SolidColorBrush)FindResource("Success");
+                }
             }
             else
             {
                 TxtGameExe.Text = "No detectado automáticamente en Steam.";
                 TxtWritePerm.Text = "N/A";
+                TxtGameProcess.Text = "N/A";
             }
 
             RefreshDependenciesList();
@@ -213,6 +225,12 @@ namespace NeuralFX.Hub
                 return;
             }
 
+            if (HardwareDiagnosticsService.IsCitiesSkylinesRunning())
+            {
+                MessageBox.Show("Cities: Skylines se encuentra actualmente en ejecución.\n\nPor favor cierra completamente el juego antes de proceder para que Windows permita escribir y registrar las librerías nativas.", "Cierra el Juego", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             var result = MessageBox.Show(
                 "¿Deseas proceder con la inyección del pipeline DLSS 5 y ReShade en Cities: Skylines?\n\nSe creará un manifiesto atómico (NeuralFX_Manifest.json) que permitirá rollback 100% limpio en cualquier momento.",
                 "Confirmar Inyección",
@@ -251,6 +269,12 @@ namespace NeuralFX.Hub
             if (!_hardwareInfo.GameFound)
             {
                 MessageBox.Show("No se ha localizado Cities.exe.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (HardwareDiagnosticsService.IsCitiesSkylinesRunning())
+            {
+                MessageBox.Show("Cities: Skylines se encuentra actualmente en ejecución.\n\nPor favor cierra completamente el juego antes de proceder con el rollback para liberar los archivos nativos.", "Cierra el Juego", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 

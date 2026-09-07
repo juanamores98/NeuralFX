@@ -8,7 +8,7 @@ namespace NeuralFX.Hub.Services
 {
     public class RollbackService
     {
-        public async Task<bool> RollbackAsync(string gameDirectory, Action<string>? logAction = null)
+        public async Task<bool> RollbackAsync(string gameDirectory, Action<string>? logAction = null, bool enforceProcessClosed = true)
         {
             void Log(string msg) => logAction?.Invoke($"[{DateTime.Now:HH:mm:ss}] {msg}");
 
@@ -17,6 +17,13 @@ namespace NeuralFX.Hub.Services
             if (!Directory.Exists(gameDirectory))
             {
                 Log($"ERROR: Directorio del juego no existe: {gameDirectory}");
+                return false;
+            }
+
+            if (enforceProcessClosed && HardwareDiagnosticsService.IsCitiesSkylinesRunning())
+            {
+                Log("ERROR BLOQUEANTE: Cities: Skylines (Cities.exe) está en ejecución.");
+                Log("Debes cerrar el juego antes del rollback para liberar los archivos nativos (dxgi.dll y addons).");
                 return false;
             }
 

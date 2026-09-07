@@ -25,6 +25,14 @@ namespace NeuralFX
         private readonly List<string> _conflictingAAComponents = new List<string>();
         private float _lastConflictCheck = 0f;
 
+        public static void ToggleWindow()
+        {
+            if (_instance != null)
+            {
+                _instance._isPanelVisible = !_instance._isPanelVisible;
+            }
+        }
+
         public void Awake()
         {
             if (_instance != null && _instance != this)
@@ -35,6 +43,7 @@ namespace NeuralFX
 
             _instance = this;
             DontDestroyOnLoad(gameObject);
+            Config.ModSettings.Load();
             Debug.Log("[NeuralFX] Gestor in-game inicializado correctamente.");
         }
 
@@ -74,19 +83,22 @@ namespace NeuralFX
             }
 
             // Check AA Conflicts every 5 seconds
-            if (Time.unscaledTime - _lastConflictCheck > 5f)
+            if (Config.ModSettings.WarnOnAaConflict && Time.unscaledTime - _lastConflictCheck > 5f)
             {
                 _lastConflictCheck = Time.unscaledTime;
                 ScanForConflictingAA();
             }
 
             // Hotkey Ctrl + Alt + N
-            bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
-            bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
-
-            if (ctrl && alt && Input.GetKeyDown(KeyCode.N))
+            if (Config.ModSettings.EnableHotkey)
             {
-                _isPanelVisible = !_isPanelVisible;
+                bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+                bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
+
+                if (ctrl && alt && Input.GetKeyDown(KeyCode.N))
+                {
+                    ToggleWindow();
+                }
             }
         }
 

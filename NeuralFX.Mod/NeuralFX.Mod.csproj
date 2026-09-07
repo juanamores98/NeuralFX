@@ -25,6 +25,7 @@
     <Reference Include="UnityEngine" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Xml" />
   </ItemGroup>
 
   <Target Name="DeployToModDirectory" AfterTargets="Build" Condition="'$(SkipDeploy)' != 'true'">

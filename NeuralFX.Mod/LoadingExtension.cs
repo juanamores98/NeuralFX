@@ -1,4 +1,6 @@
 using ICities;
+using NeuralFX.Config;
+using NeuralFX.UI;
 using UnityEngine;
 
 namespace NeuralFX
@@ -11,6 +13,8 @@ namespace NeuralFX
         {
             base.OnLevelLoaded(mode);
 
+            ModSettings.Load();
+
             if (_managerObject == null)
             {
                 _managerObject = new GameObject("NeuralFX_Manager");
@@ -20,15 +24,25 @@ namespace NeuralFX
             else
             {
                 var mgr = _managerObject.GetComponent<NeuralFXManager>();
-                if (mgr != null)
+                if (mgr != null && ModSettings.ForceMotionVectorsOnLoad)
                 {
                     mgr.EnsureCameraModes();
                 }
+            }
+
+            if (ModSettings.EnableUui)
+            {
+                UuiButton.Register(
+                    "NeuralFX",
+                    "NeuralFX - DLSS 5 & Telemetría (Ctrl+Alt+N)",
+                    TrayIcon.Make(),
+                    show => NeuralFXManager.ToggleWindow());
             }
         }
 
         public override void OnLevelUnloading()
         {
+            UuiButton.Unregister();
             base.OnLevelUnloading();
         }
     }

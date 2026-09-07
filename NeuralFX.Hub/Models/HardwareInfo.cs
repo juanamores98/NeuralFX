@@ -19,8 +19,9 @@ namespace NeuralFX.Hub.Models
         public string GameExePath { get; set; } = string.Empty;
         public bool GameFound { get; set; }
         public bool CanWriteGameDir { get; set; }
+        public bool IsGameRunning { get; set; }
 
         public bool IsSystemReadyForDLSS5 =>
-            IsNvidia && SupportsDLSS5 && DriverMeetsRequirement && VramGB >= 6.0 && GameFound && CanWriteGameDir;
+            IsNvidia && SupportsDLSS5 && DriverMeetsRequirement && VramGB >= 6.0 && GameFound && CanWriteGameDir && !IsGameRunning;
     }
 }

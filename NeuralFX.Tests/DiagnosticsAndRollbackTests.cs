@@ -74,9 +74,9 @@ namespace NeuralFX.Tests
                     if (dep.Id == "nvngx_dlss") { dep.LocalCachedPath = mockDlss; dep.Status = DependencyStatus.InCache; }
                 }
 
-                // Install into mock directory
-                bool installed = await installEngine.InstallAsync(tempGameDir, dependencies);
-                Assert.True(installed, "La instalación debe completarse");
+                // Install into mock directory (skipping process check in unit sandbox)
+                bool installed = await installEngine.InstallAsync(tempGameDir, dependencies, null, enforceProcessClosed: false);
+                Assert.True(installed, "La instalación debe completarse en sandbox");
 
                 // Verify installed files exist
                 Assert.True(File.Exists(Path.Combine(tempGameDir, "NeuralFX_Manifest.json")), "Manifiesto debe existir");
@@ -95,7 +95,7 @@ namespace NeuralFX.Tests
                 Assert.True(rollbackService.IsInjectionActive(tempGameDir), "Debe reportar inyección activa");
 
                 // Execute Rollback
-                bool cleanRollback = await rollbackService.RollbackAsync(tempGameDir);
+                bool cleanRollback = await rollbackService.RollbackAsync(tempGameDir, null, enforceProcessClosed: false);
                 Assert.True(cleanRollback, "El rollback debe devolver true");
 
                 // Verify Zero-Trace
@@ -118,6 +118,34 @@ namespace NeuralFX.Tests
             {
                 if (Directory.Exists(tempGameDir)) Directory.Delete(tempGameDir, true);
                 if (Directory.Exists(tempCacheDir)) Directory.Delete(tempCacheDir, true);
+            }
+        }
+
+        [Fact]
+        public async Task TestInstallationEngine_BlocksWhenGameIsRunning()
+        {
+            if (!HardwareDiagnosticsService.IsCitiesSkylinesRunning())
+            {
+                // Solo corre si Cities.exe está activo en la máquina
+                return;
+            }
+
+            string tempGameDir = Path.Combine(Path.GetTempPath(), $"NeuralFX_RunningTest_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempGameDir);
+
+            try
+            {
+                var depService = new DependencyManagerService();
+                var installEngine = new InstallationEngineService(depService);
+                var dependencies = depService.GetInitialDependencies(tempGameDir);
+
+                // Con enforceProcessClosed: true, debe bloquear de inmediato
+                bool result = await installEngine.InstallAsync(tempGameDir, dependencies, null, enforceProcessClosed: true);
+                Assert.False(result, "Debe bloquear la instalación si Cities.exe está en ejecución");
+            }
+            finally
+            {
+                if (Directory.Exists(tempGameDir)) Directory.Delete(tempGameDir, true);
             }
         }
     }

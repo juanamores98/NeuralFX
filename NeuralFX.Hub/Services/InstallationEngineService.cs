@@ -16,7 +16,7 @@ namespace NeuralFX.Hub.Services
             _dependencyManager = dependencyManager;
         }
 
-        public async Task<bool> InstallAsync(string gameDirectory, List<DependencyItem> items, Action<string>? logAction = null)
+        public async Task<bool> InstallAsync(string gameDirectory, List<DependencyItem> items, Action<string>? logAction = null, bool enforceProcessClosed = true)
         {
             void Log(string msg) => logAction?.Invoke($"[{DateTime.Now:HH:mm:ss}] {msg}");
 
@@ -31,6 +31,13 @@ namespace NeuralFX.Hub.Services
             if (!HardwareDiagnosticsService.TestDirectoryWritable(gameDirectory))
             {
                 Log("ERROR: No hay permisos de escritura en la carpeta del juego. Ejecuta como Administrador.");
+                return false;
+            }
+
+            if (enforceProcessClosed && HardwareDiagnosticsService.IsCitiesSkylinesRunning())
+            {
+                Log("ERROR BLOQUEANTE: Cities: Skylines (Cities.exe) está en ejecución.");
+                Log("Debes cerrar el juego antes de instalar para que Windows permita escribir los módulos nativos.");
                 return false;
             }
 

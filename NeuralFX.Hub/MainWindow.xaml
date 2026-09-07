@@ -137,6 +137,7 @@
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
@@ -150,6 +151,11 @@
                                     <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,6,0,0">
                                         <TextBlock Text="Permiso de escritura en carpeta: " FontSize="11" Foreground="{StaticResource TextDim}" />
                                         <TextBlock x:Name="TxtWritePerm" Text="Comprobando..." FontWeight="Bold" FontSize="11" Foreground="{StaticResource Success}" />
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,6,0,0">
+                                        <TextBlock Text="Estado del Proceso: " FontSize="11" Foreground="{StaticResource TextDim}" />
+                                        <TextBlock x:Name="TxtGameProcess" Text="Comprobando..." FontWeight="Bold" FontSize="11" Foreground="{StaticResource Success}" />
                                     </StackPanel>
                                 </Grid>
                             </Border>

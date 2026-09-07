@@ -211,6 +211,20 @@ namespace NeuralFX.Hub.Services
             if (info.GameFound)
             {
                 info.CanWriteGameDir = TestDirectoryWritable(Path.GetDirectoryName(info.GameExePath)!);
+                info.IsGameRunning = IsCitiesSkylinesRunning();
+            }
+        }
+
+        public static bool IsCitiesSkylinesRunning()
+        {
+            try
+            {
+                var processes = System.Diagnostics.Process.GetProcessesByName("Cities");
+                return processes != null && processes.Length > 0;
+            }
+            catch
+            {
+                return false;
             }
         }
 
