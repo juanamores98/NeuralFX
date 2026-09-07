@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="NeuralFX.Hub/NeuralFX.Hub.csproj" />
+  <Project Path="NeuralFX.Mod/NeuralFX.Mod.csproj" />
+  <Project Path="NeuralFX.Tests/NeuralFX.Tests.csproj" />
+</Solution>

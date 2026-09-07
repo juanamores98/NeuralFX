@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net35</TargetFramework>
+    <AssemblyName>NeuralFX</AssemblyName>
+    <RootNamespace>NeuralFX</RootNamespace>
+    <OutputType>Library</OutputType>
+    <LangVersion>latest</LangVersion>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AutoGenerateBindingRedirects>False</AutoGenerateBindingRedirects>
+    <EnableNETAnalyzers>False</EnableNETAnalyzers>
+    <AnalysisLevel>none</AnalysisLevel>
+
+    <ManagedDLLPath>$(MSBuildProgramFiles32)/Steam/steamapps/common/Cities_Skylines/Cities_Data/Managed</ManagedDLLPath>
+    <AssemblySearchPaths>
+      $(AssemblySearchPaths);
+      $(ManagedDLLPath)
+    </AssemblySearchPaths>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp" />
+    <Reference Include="ColossalManaged" />
+    <Reference Include="ICities" />
+    <Reference Include="UnityEngine" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+  </ItemGroup>
+
+  <Target Name="DeployToModDirectory" AfterTargets="Build" Condition="'$(SkipDeploy)' != 'true'">
+    <PropertyGroup>
+      <DeployDir>$(LOCALAPPDATA)/Colossal Order/Cities_Skylines/Addons/Mods/NeuralFX/</DeployDir>
+      <PublishHubDir>$(MSBuildProjectDirectory)/../Publish/</PublishHubDir>
+      <SolutionRootDir>$(MSBuildProjectDirectory)/../</SolutionRootDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(DeployDir)" />
+    <MakeDir Directories="$(DeployDir)Hub" />
+
+    <!-- In-Game Mod Binary -->
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(DeployDir)" />
+
+    <!-- Companion Desktop App Binaries -->
+    <ItemGroup Condition="Exists('$(PublishHubDir)')">
+      <_HubBinaries Include="$(PublishHubDir)*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_HubBinaries)" DestinationFolder="$(DeployDir)Hub/" SkipUnchangedFiles="true" Condition="'@(_HubBinaries)' != ''" />
+
+    <!-- Launcher & Documentation -->
+    <Copy SourceFiles="$(SolutionRootDir)Iniciar-NeuralFX-Hub.bat" DestinationFolder="$(DeployDir)" SkipUnchangedFiles="true" Condition="Exists('$(SolutionRootDir)Iniciar-NeuralFX-Hub.bat')" />
+    <Copy SourceFiles="$(SolutionRootDir)README.md" DestinationFolder="$(DeployDir)" SkipUnchangedFiles="true" Condition="Exists('$(SolutionRootDir)README.md')" />
+    <Copy SourceFiles="$(SolutionRootDir)LICENSE" DestinationFolder="$(DeployDir)" SkipUnchangedFiles="true" Condition="Exists('$(SolutionRootDir)LICENSE')" />
+    <Copy SourceFiles="$(SolutionRootDir)NOTICE" DestinationFolder="$(DeployDir)" SkipUnchangedFiles="true" Condition="Exists('$(SolutionRootDir)NOTICE')" />
+
+    <Message Importance="high" Text="NeuralFX Suite completa desplegada con exito en $(DeployDir)" />
+  </Target>
+
+</Project>

@@ -1,0 +1,11 @@
+NeuralFX - Suite Autónoma de Diagnóstico, Escalado Neural e Inyección Atómica para Cities: Skylines 1
+Copyright 2026 juanamores98
+
+Este proyecto es una suite independiente y modular creada para Cities: Skylines 1.
+No incluye ni redistribuye binarios propietarios de NVIDIA (nvngx_dlss.dll / nvngx_dlssnr.dll).
+
+Agradecimientos y referencias técnicas:
+- ReShade por crosire y colaboradores (Licencia BSD 3-Clause).
+- AMD FidelityFX Contrast Adaptive Sharpening (CAS) por Advanced Micro Devices, Inc. (Licencia MIT).
+- NVIDIA DLSS / DLSS-SR / DLSS-NR marcas y tecnologías registradas por NVIDIA Corporation.
+- Cities: Skylines por Colossal Order Ltd. y Paradox Interactive.

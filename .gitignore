@@ -1,0 +1,15 @@
+# Build and Publish output
+bin/
+obj/
+Publish/
+*.user
+*.suo
+.vs/
+.vscode/
+
+# Test output
+TestResults/
+
+# Temporary files
+*.tmp
+*.log
