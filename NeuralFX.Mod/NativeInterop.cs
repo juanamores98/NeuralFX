@@ -7,128 +7,32 @@ namespace NeuralFX
 {
     public static class NativeInterop
     {
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        public static extern IntPtr GetModuleHandle(string lpModuleName);
-
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        public static extern uint GetModuleFileName(IntPtr hModule, [Out] StringBuilder lpFilename, [In] [MarshalAs(UnmanagedType.U4)] int nSize);
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
-        public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
-
-        public static string GetGameDirectory()
-        {
-            try
-            {
-                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                if (!string.IsNullOrEmpty(baseDir) && File.Exists(Path.Combine(baseDir, "Cities.exe")))
-                {
-                    return baseDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                }
-
-                string currentDir = Directory.GetCurrentDirectory();
-                if (!string.IsNullOrEmpty(currentDir) && File.Exists(Path.Combine(currentDir, "Cities.exe")))
-                {
-                    return currentDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                }
-
-                return baseDir ?? currentDir ?? string.Empty;
-            }
-            catch
-            {
-                return Directory.GetCurrentDirectory();
-            }
-        }
-
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)] public static extern IntPtr GetModuleHandleW(string moduleName);
+        public static IntPtr GetModuleHandle(string name) { return GetModuleHandleW(name); }
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)] private static extern uint GetModuleFileNameW(IntPtr module, StringBuilder path, int count);
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true)] public static extern IntPtr GetProcAddress(IntPtr module, string name);
+        [DllImport("kernel32.dll")] public static extern int GetCurrentProcessId();
+        public static string GetGameDirectory() { return Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory).TrimEnd('\\', '/'); }
         public static bool IsReShadeHooked()
         {
-            try
-            {
-                string gameDir = GetGameDirectory();
-                if (string.IsNullOrEmpty(gameDir)) return false;
-
-                string localDxgi = Path.Combine(gameDir, "dxgi.dll");
-                // 1. Si dxgi.dll NO existe físicamente en la carpeta del juego, ReShade no está instalado
-                if (!File.Exists(localDxgi))
-                {
-                    return false;
-                }
-
-                IntPtr handle = GetModuleHandle("dxgi.dll");
-                if (handle == IntPtr.Zero)
-                {
-                    return false;
-                }
-
-                // 2. Verificar que el módulo cargado provenga de la carpeta del juego y no de C:\Windows\System32
-                StringBuilder sb = new StringBuilder(512);
-                uint len = GetModuleFileName(handle, sb, sb.Capacity);
-                if (len > 0)
-                {
-                    string loadedPath = sb.ToString();
-                    if (!loadedPath.StartsWith(gameDir, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return false;
-                    }
-                }
-
-                // 3. Verificar export de ReShade Addon
-                if (GetProcAddress(handle, "ReShadeRegisterAddon") != IntPtr.Zero ||
-                    GetProcAddress(handle, "ReShadeUnregisterAddon") != IntPtr.Zero)
-                {
-                    return true;
-                }
-
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
+            IntPtr handle = LocalModule("dxgi.dll");
+            return handle != IntPtr.Zero && GetProcAddress(handle, "ReShadeRegisterAddon") != IntPtr.Zero;
         }
-
-        public static bool IsFeederAddonLoaded()
+        public static bool IsFeederAddonLoaded() { return LocalModule("dlss5-feed.addon64") != IntPtr.Zero; }
+        public static bool IsModuleLoaded(string name) { return name.Equals("dxgi.dll", StringComparison.OrdinalIgnoreCase) ? IsReShadeHooked() : LocalModule(name) != IntPtr.Zero; }
+        private static IntPtr LocalModule(string name)
         {
             try
             {
-                string gameDir = GetGameDirectory();
-                if (string.IsNullOrEmpty(gameDir)) return false;
-
-                string localFeeder = Path.Combine(gameDir, "dlss5-feed.addon64");
-                if (!File.Exists(localFeeder))
-                {
-                    return false;
-                }
-
-                IntPtr handle = GetModuleHandle("dlss5-feed.addon64");
-                return handle != IntPtr.Zero;
+                IntPtr handle = GetModuleHandle(name);
+                if (handle == IntPtr.Zero) return IntPtr.Zero;
+                var path = new StringBuilder(32768);
+                uint length = GetModuleFileNameW(handle, path, path.Capacity);
+                if (length == 0 || length >= path.Capacity) return IntPtr.Zero;
+                string expected = Path.GetFullPath(Path.Combine(GetGameDirectory(), name));
+                return string.Equals(expected, Path.GetFullPath(path.ToString()), StringComparison.OrdinalIgnoreCase) ? handle : IntPtr.Zero;
             }
-            catch
-            {
-                return false;
-            }
-        }
-
-        public static bool IsModuleLoaded(string moduleName)
-        {
-            if (string.Equals(moduleName, "dxgi.dll", StringComparison.OrdinalIgnoreCase))
-            {
-                return IsReShadeHooked();
-            }
-            if (string.Equals(moduleName, "dlss5-feed.addon64", StringComparison.OrdinalIgnoreCase))
-            {
-                return IsFeederAddonLoaded();
-            }
-
-            try
-            {
-                IntPtr handle = GetModuleHandle(moduleName);
-                return handle != IntPtr.Zero;
-            }
-            catch
-            {
-                return false;
-            }
+            catch { return IntPtr.Zero; }
         }
     }
 }

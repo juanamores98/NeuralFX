@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using NeuralFX.Hub.Models;
@@ -9,283 +11,121 @@ namespace NeuralFX.Hub.Services
 {
     public class InstallationEngineService
     {
-        private readonly DependencyManagerService _dependencyManager;
+        private readonly DependencyManagerService _dependencies;
+        private readonly Func<bool> _isGameRunning;
+        internal Action<int>? AfterWrite { get; set; }
+        public InstallationEngineService(DependencyManagerService dependencyManager, Func<bool>? isGameRunning = null)
+        { _dependencies = dependencyManager; _isGameRunning = isGameRunning ?? HardwareDiagnosticsService.IsCitiesSkylinesRunning; }
 
-        public InstallationEngineService(DependencyManagerService dependencyManager)
+        public Task<bool> InstallAsync(string gameDirectory, List<DependencyItem> items, Action<string>? logAction = null, bool enforceProcessClosed = true, PipelinePreset preset = PipelinePreset.Native)
+            => Task.Run(() => Install(gameDirectory, items, logAction, enforceProcessClosed, preset));
+
+        private bool Install(string root, List<DependencyItem> items, Action<string>? log, bool enforceClosed, PipelinePreset preset)
         {
-            _dependencyManager = dependencyManager;
-        }
-
-        public async Task<bool> InstallAsync(string gameDirectory, List<DependencyItem> items, Action<string>? logAction = null, bool enforceProcessClosed = true)
-        {
-            void Log(string msg) => logAction?.Invoke($"[{DateTime.Now:HH:mm:ss}] {msg}");
-
-            Log("Iniciando verificación previa de instalación...");
-
-            if (!Directory.Exists(gameDirectory))
-            {
-                Log($"ERROR: El directorio del juego no existe: {gameDirectory}");
-                return false;
-            }
-
-            if (!HardwareDiagnosticsService.TestDirectoryWritable(gameDirectory))
-            {
-                Log("ERROR: No hay permisos de escritura en la carpeta del juego. Ejecuta como Administrador.");
-                return false;
-            }
-
-            if (enforceProcessClosed && HardwareDiagnosticsService.IsCitiesSkylinesRunning())
-            {
-                Log("ERROR BLOQUEANTE: Cities: Skylines (Cities.exe) está en ejecución.");
-                Log("Debes cerrar el juego antes de instalar para que Windows permita escribir los módulos nativos.");
-                return false;
-            }
-
-            var manifest = new InstallationManifest
-            {
-                GameDirectory = gameDirectory,
-                InstalledAt = DateTime.UtcNow
-            };
-
             try
             {
-                // 1. Manejar backup si ya existe un dxgi.dll ajeno o anterior sin manifiesto
-                string targetDxgi = Path.Combine(gameDirectory, "dxgi.dll");
-                string manifestPath = Path.Combine(gameDirectory, "NeuralFX_Manifest.json");
-
-                if (File.Exists(targetDxgi) && !File.Exists(manifestPath))
+                if (!Directory.Exists(root)) throw new DirectoryNotFoundException(root);
+                if (enforceClosed && _isGameRunning()) throw new IOException("Cierra Cities: Skylines antes de instalar.");
+                using var lease = new InstallationLease(root);
+                FileTransaction.Recover(root);
+                string manifestPath = ManagedPaths.Resolve(root, "NeuralFX_Manifest.json");
+                byte[]? previousManifest = null;
+                var manifest = new InstallationManifest { SchemaVersion = 2, GameDirectory = Path.GetFullPath(root) };
+                if (File.Exists(manifestPath))
                 {
-                    string backupFile = Path.Combine(_dependencyManager.BackupsDirectory, $"dxgi_backup_{DateTime.Now:yyyyMMdd_HHmmss}.dll");
-                    Log($"Se detectó un dxgi.dll existente sin manifiesto. Creando backup en: {backupFile}");
-                    File.Copy(targetDxgi, backupFile, true);
-                    manifest.BackedUpFiles["dxgi.dll"] = backupFile;
-                }
-
-                // 2. Copiar archivos binarios desde caché
-                foreach (var item in items)
-                {
-                    if (item.Category == DependencyCategory.Runtime || 
-                        item.Category == DependencyCategory.Addon || 
-                        item.Category == DependencyCategory.NvidiaProprietary)
+                    var existing = JsonSerializer.Deserialize<InstallationManifest>(File.ReadAllText(manifestPath)) ?? throw new InvalidDataException("Manifiesto vacío.");
+                    if (existing.SchemaVersion == 2) manifest = ManifestStore.Read(root);
+                    else
                     {
-                        if (string.IsNullOrEmpty(item.LocalCachedPath) || !File.Exists(item.LocalCachedPath))
-                        {
-                            if (item.IsRequired)
-                            {
-                                Log($"ERROR: Dependencia requerida no disponible en caché: {item.DisplayName}");
-                                return false;
-                            }
-                            else
-                            {
-                                Log($"AVISO: Dependencia opcional no encontrada, se omite: {item.DisplayName}");
-                                continue;
-                            }
-                        }
-
-                        string destPath = Path.Combine(gameDirectory, item.TargetRelativePath);
-                        Log($"Inyectando: {item.TargetRelativePath} ({item.FileSize / 1024} KB)...");
-                        await Task.Run(() => File.Copy(item.LocalCachedPath, destPath, true));
-
-                        manifest.InstalledFiles.Add(item.TargetRelativePath);
-                        manifest.FileChecksums[item.TargetRelativePath] = DependencyManagerService.CalculateSha256(destPath);
-
-                        // Espejo de compatibilidad para denoiser (nvngx_dlssd / nvngx_dlssnr)
-                        if (item.Id == "nvngx_dlssd")
-                        {
-                            string nrPath = Path.Combine(gameDirectory, "nvngx_dlssnr.dll");
-                            if (!File.Exists(nrPath))
-                            {
-                                File.Copy(destPath, nrPath, true);
-                                manifest.InstalledFiles.Add("nvngx_dlssnr.dll");
-                                manifest.FileChecksums["nvngx_dlssnr.dll"] = DependencyManagerService.CalculateSha256(nrPath);
-                                Log("Creado enlace de compatibilidad: nvngx_dlssnr.dll");
-                            }
-                        }
+                        if (existing.SchemaVersion is not (0 or 1) || existing.ToolName != "NeuralFX" || !Path.GetFullPath(existing.GameDirectory).TrimEnd('\\').Equals(Path.GetFullPath(root).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidDataException("Manifiesto desconocido: no se modifica.");
+                        // Legacy ownership/backups were incomplete. Snapshot the current installation as the upgrade baseline.
+                        previousManifest = File.ReadAllBytes(manifestPath);
+                        manifest.PreviousManifestBackup = ".neuralfx-backups/" + Guid.NewGuid().ToString("N") + ".manifest.json";
+                        manifest.PreviousManifestSha256 = DependencyManagerService.Hash(previousManifest);
+                        log?.Invoke("Migración: el rollback restaurará el estado actual de la instalación antigua, incluido su manifiesto. Sus backups originales se conservan.");
                     }
                 }
-
-                // 3. Crear configuraciones calibradas de ReShade y DLSS5-Feeder
-                await GenerateConfigFilesAsync(gameDirectory, manifest, Log);
-
-                // 4. Crear suite de Shaders (AMD CAS & LumeniteFX)
-                await GenerateShadersAsync(gameDirectory, manifest, Log);
-
-                // 5. Guardar manifiesto atómico
-                string manifestJson = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
-                await File.WriteAllTextAsync(manifestPath, manifestJson);
-                Log("Manifiesto de instalación registrado exitosamente (NeuralFX_Manifest.json).");
-
-                Log(">> Instalación completada con éxito. Pipeline NeuralFX listo para el juego.");
+                var payload = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+                foreach (var item in items.Where(x => !x.IsEmbedded))
+                {
+                    if (!item.IsRequired && !item.IsInCache) continue;
+                    foreach (var file in _dependencies.ReadPayload(item)) payload.Add(file.Key, file.Value);
+                }
+                foreach (var file in PipelineConfiguration.Create(root, preset)) payload.Add(file.Key, file.Value);
+                // Complete validation and payload preparation precedes all writes to the game.
+                foreach (string relative in payload.Keys) ManagedPaths.Resolve(root, relative);
+                using var transaction = new FileTransaction(root);
+                // ReShade falls back to the shared system temp directory if its configured cache folder does not exist.
+                const string runtimeCache = ".neuralfx-runtime/ReShade";
+                transaction.EnsureDirectory(runtimeCache);
+                foreach (string relative in new[] { runtimeCache }.Concat(PipelineFootprint.Parents(runtimeCache)))
+                    if (!Directory.Exists(ManagedPaths.Resolve(root, relative)) && !manifest.InstalledDirectories.Contains(relative)) manifest.InstalledDirectories.Add(relative);
+                if (previousManifest != null) transaction.Write(manifest.PreviousManifestBackup!, previousManifest);
+                foreach (var file in payload)
+                {
+                    string destination = ManagedPaths.Resolve(root, file.Key);
+                    if (!manifest.InstalledFiles.Contains(file.Key, StringComparer.OrdinalIgnoreCase))
+                    {
+                        if (File.Exists(destination))
+                        {
+                            string backup = ".neuralfx-backups/" + Guid.NewGuid().ToString("N") + ".bin";
+                            byte[] original = File.ReadAllBytes(destination);
+                            transaction.Write(backup, original);
+                            manifest.BackedUpFiles.Add(file.Key, backup);
+                            manifest.BackupChecksums.Add(file.Key, DependencyManagerService.Hash(original));
+                        }
+                        manifest.InstalledFiles.Add(file.Key);
+                    }
+                    for (string? dir = Path.GetDirectoryName(destination); dir != null && !Directory.Exists(dir); dir = Path.GetDirectoryName(dir))
+                    {
+                        string relative = Path.GetRelativePath(root, dir);
+                        if (!manifest.InstalledDirectories.Contains(relative)) manifest.InstalledDirectories.Add(relative);
+                    }
+                    transaction.Write(file.Key, file.Value);
+                    manifest.FileChecksums[file.Key] = DependencyManagerService.Hash(file.Value);
+                }
+                string gameExe = ManagedPaths.Resolve(root, "Cities.exe");
+                manifest.InstalledAt = DateTime.UtcNow;
+                manifest.GameExecutableSha256 = File.Exists(gameExe) ? DependencyManagerService.CalculateSha256(gameExe) : null;
+                transaction.Write("NeuralFX_Manifest.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true })));
+                if (enforceClosed && _isGameRunning()) throw new IOException("El juego se abrió durante la preparación. Instalación cancelada.");
+                transaction.Commit(AfterWrite);
+                log?.Invoke("Instalación registrada. Comprueba en juego el efecto, los buffers y las evaluaciones; archivos presentes no significa inferencia activa.");
                 return true;
             }
-            catch (Exception ex)
-            {
-                Log($"ERROR CRÍTICO durante la instalación: {ex.Message}");
-                return false;
-            }
+            catch (Exception ex) { log?.Invoke("Instalación cancelada/recuperada: " + ex.Message); return false; }
         }
-
-        private async Task GenerateConfigFilesAsync(string gameDirectory, InstallationManifest manifest, Action<string> log)
-        {
-            // Generar dlss5-feed.cfg calibrado para Unity 5.6 DX11
-            string cfgPath = Path.Combine(gameDirectory, "dlss5-feed.cfg");
-            string cfgContent = @"# NeuralFX / DLSS5-Feeder Configuration for Cities: Skylines (Unity 5.6 DX11)
-[General]
-Enabled=1
-LogLevel=2
-AutoDetectPipelines=1
-
-[Depth]
-InvertDepth=0
-LinearizeDepth=0
-DepthBias=0.000000
-
-[MotionVectors]
-EnableMotionVectors=1
-MotionVectorScaleX=1.000000
-MotionVectorScaleY=1.000000
-JitterCancellation=1
-
-[DLSS]
-PerformanceProfile=2 ; 0=UltraPerformance, 1=Performance, 2=Balanced, 3=Quality, 4=DLAA
-Sharpness=0.350000
-NeuralReconstruction=1
-AutoExposure=1
-";
-            log("Generando configuración precalibrada dlss5-feed.cfg...");
-            await File.WriteAllTextAsync(cfgPath, cfgContent);
-            manifest.InstalledFiles.Add("dlss5-feed.cfg");
-            manifest.FileChecksums["dlss5-feed.cfg"] = DependencyManagerService.CalculateSha256(cfgPath);
-
-            // Generar ReShade.ini
-            string iniPath = Path.Combine(gameDirectory, "ReShade.ini");
-            string iniContent = @"[GENERAL]
-EffectSearchPaths=.\reshade-shaders\Shaders
-TextureSearchPaths=.\reshade-shaders\Textures
-CurrentPresetPath=.\ReShadePreset.ini
-PerformanceMode=1
-ShowFPS=0
-ShowClock=0
-NoReloadOnInit=1
-
-[OVERLAY]
-ShowOverlay=0
-KeyOverlay=36,0,0,0 ; Key Home
-KeyReload=0,0,0,0
-";
-            log("Generando configuración ReShade.ini...");
-            await File.WriteAllTextAsync(iniPath, iniContent);
-            manifest.InstalledFiles.Add("ReShade.ini");
-            manifest.FileChecksums["ReShade.ini"] = DependencyManagerService.CalculateSha256(iniPath);
-
-            // Generar ReShadePreset.ini
-            string presetPath = Path.Combine(gameDirectory, "ReShadePreset.ini");
-            string presetContent = @"Techniques=CAS@CAS.fx
-TechniqueSorting=CAS@CAS.fx
-
-[CAS.fx]
-Contrast=0.000000
-Sharpening=0.300000
-";
-            log("Generando preset ReShadePreset.ini...");
-            await File.WriteAllTextAsync(presetPath, presetContent);
-            manifest.InstalledFiles.Add("ReShadePreset.ini");
-            manifest.FileChecksums["ReShadePreset.ini"] = DependencyManagerService.CalculateSha256(presetPath);
-        }
-
-        private async Task GenerateShadersAsync(string gameDirectory, InstallationManifest manifest, Action<string> log)
-        {
-            string shadersDir = Path.Combine(gameDirectory, "reshade-shaders", "Shaders");
-            string texturesDir = Path.Combine(gameDirectory, "reshade-shaders", "Textures");
-
-            Directory.CreateDirectory(shadersDir);
-            Directory.CreateDirectory(texturesDir);
-
-            if (!manifest.InstalledDirectories.Contains("reshade-shaders"))
-            {
-                manifest.InstalledDirectories.Add("reshade-shaders");
-            }
-
-            // AMD CAS HLSL Shader para nitidez post-reconstrucción
-            string casFxPath = Path.Combine(shadersDir, "CAS.fx");
-            string casContent = @"// AMD FidelityFX Contrast Adaptive Sharpening (CAS) for ReShade
-// Minimal Clean Implementation for NeuralFX
-
-#include ""ReShade.fxh""
-
-uniform float Sharpening <
-    ui_type = ""slider"";
-    ui_min = 0.0; ui_max = 1.0;
-    ui_label = ""Nitidez CAS"";
-> = 0.30;
-
-uniform float Contrast <
-    ui_type = ""slider"";
-    ui_min = 0.0; ui_max = 1.0;
-    ui_label = ""Ajuste de Contraste"";
-> = 0.0;
-
-float3 CASPass(float4 vpos : SV_Position, float2 texcoord : TexCoord) : SV_Target
-{
-    float3 a = tex2D(ReShade::BackBuffer, texcoord + float2(-BUFFER_RCP_WIDTH, -BUFFER_RCP_HEIGHT)).rgb;
-    float3 b = tex2D(ReShade::BackBuffer, texcoord + float2(0.0, -BUFFER_RCP_HEIGHT)).rgb;
-    float3 c = tex2D(ReShade::BackBuffer, texcoord + float2(BUFFER_RCP_WIDTH, -BUFFER_RCP_HEIGHT)).rgb;
-    float3 d = tex2D(ReShade::BackBuffer, texcoord + float2(-BUFFER_RCP_WIDTH, 0.0)).rgb;
-    float3 e = tex2D(ReShade::BackBuffer, texcoord).rgb;
-    float3 f = tex2D(ReShade::BackBuffer, texcoord + float2(BUFFER_RCP_WIDTH, 0.0)).rgb;
-    float3 g = tex2D(ReShade::BackBuffer, texcoord + float2(-BUFFER_RCP_WIDTH, BUFFER_RCP_HEIGHT)).rgb;
-    float3 h = tex2D(ReShade::BackBuffer, texcoord + float2(0.0, BUFFER_RCP_HEIGHT)).rgb;
-    float3 i = tex2D(ReShade::BackBuffer, texcoord + float2(BUFFER_RCP_WIDTH, BUFFER_RCP_HEIGHT)).rgb;
-
-    float3 mn = min(min(min(d, e), min(f, b)), h);
-    float3 mx = max(max(max(d, e), max(f, b)), h);
-
-    float3 amp = saturate(min(mn, 2.0 - mx) / mx);
-    float3 w = amp * -Sharpening;
-
-    float3 result = (b * w + d * w + f * w + h * w + e) / (1.0 + 4.0 * w);
-    return saturate(result);
-}
-
-technique CAS
-{
-    pass
-    {
-        VertexShader = PostProcessVS;
-        PixelShader = CASPass;
     }
-}
-";
-            log("Desplegando shader AMD FidelityFX CAS...");
-            await File.WriteAllTextAsync(casFxPath, casContent);
-            manifest.InstalledFiles.Add(Path.Combine("reshade-shaders", "Shaders", "CAS.fx"));
-            manifest.FileChecksums[Path.Combine("reshade-shaders", "Shaders", "CAS.fx")] = DependencyManagerService.CalculateSha256(casFxPath);
 
-            // ReShade.fxh basic helper
-            string fxhPath = Path.Combine(shadersDir, "ReShade.fxh");
-            string fxhContent = @"#pragma once
-
-#define BUFFER_WIDTH 1920
-#define BUFFER_HEIGHT 1080
-#define BUFFER_RCP_WIDTH (1.0 / BUFFER_WIDTH)
-#define BUFFER_RCP_HEIGHT (1.0 / BUFFER_HEIGHT)
-
-namespace ReShade
-{
-    texture BackBufferTex : COLOR;
-    sampler BackBuffer { Texture = BackBufferTex; };
-}
-
-void PostProcessVS(in uint id : SV_VertexID, out float4 position : SV_Position, out float2 texcoord : TexCoord)
-{
-    texcoord.x = (id == 2) ? 2.0 : 0.0;
-    texcoord.y = (id == 1) ? 2.0 : 0.0;
-    position = float4(texcoord * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
-}
-";
-            await File.WriteAllTextAsync(fxhPath, fxhContent);
-            manifest.InstalledFiles.Add(Path.Combine("reshade-shaders", "Shaders", "ReShade.fxh"));
-            manifest.FileChecksums[Path.Combine("reshade-shaders", "Shaders", "ReShade.fxh")] = DependencyManagerService.CalculateSha256(fxhPath);
+    internal static class ManifestStore
+    {
+        public static InstallationManifest Read(string root)
+        {
+            var manifest = JsonSerializer.Deserialize<InstallationManifest>(File.ReadAllText(ManagedPaths.Resolve(root, "NeuralFX_Manifest.json"))) ?? throw new InvalidDataException("Manifiesto vacío.");
+            if (manifest.SchemaVersion != 2 || manifest.ToolName != "NeuralFX") throw new InvalidDataException("Manifiesto antiguo o desconocido: se conserva sin borrar recursos. Requiere revisar y migrar su instalación.");
+            if (manifest.InstalledFiles == null || manifest.InstalledDirectories == null || manifest.FileChecksums == null || manifest.BackedUpFiles == null || manifest.BackupChecksums == null || string.IsNullOrEmpty(manifest.GameDirectory)) throw new InvalidDataException("Manifiesto incompleto.");
+            if (!string.Equals(Path.GetFullPath(manifest.GameDirectory).TrimEnd('\\', '/'), Path.GetFullPath(root).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("El manifiesto corresponde a otro directorio.");
+            if (manifest.InstalledFiles.Select(p => ManagedPaths.Resolve(root, p)).Distinct(StringComparer.OrdinalIgnoreCase).Count() != manifest.InstalledFiles.Count) throw new InvalidDataException("Archivos duplicados.");
+            foreach (string path in manifest.InstalledFiles)
+            {
+                ManagedPaths.Resolve(root, path);
+                if (!manifest.FileChecksums.ContainsKey(path) || path.StartsWith(".neuralfx", StringComparison.OrdinalIgnoreCase) || path.Equals("Cities.exe", StringComparison.OrdinalIgnoreCase) || path.Equals("NeuralFX_Manifest.json", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Entrada de manifiesto inválida.");
+            }
+            foreach (string dir in manifest.InstalledDirectories) ManagedPaths.Resolve(root, dir);
+            foreach (var backup in manifest.BackedUpFiles)
+            {
+                if (!manifest.InstalledFiles.Contains(backup.Key) || !backup.Value.StartsWith(".neuralfx-backups/", StringComparison.Ordinal) || !manifest.BackupChecksums.ContainsKey(backup.Key)) throw new InvalidDataException("Backup inválido.");
+                string path = ManagedPaths.Resolve(root, backup.Value);
+                if (!File.Exists(path) || DependencyManagerService.CalculateSha256(path) != manifest.BackupChecksums[backup.Key]) throw new InvalidDataException("Backup ausente o alterado: " + backup.Key);
+            }
+            if (manifest.PreviousManifestBackup != null)
+            {
+                if (!manifest.PreviousManifestBackup.StartsWith(".neuralfx-backups/", StringComparison.Ordinal)) throw new InvalidDataException("Backup de manifiesto inválido.");
+                string path = ManagedPaths.Resolve(root, manifest.PreviousManifestBackup);
+                if (!File.Exists(path) || DependencyManagerService.CalculateSha256(path) != manifest.PreviousManifestSha256) throw new InvalidDataException("Backup de manifiesto ausente o alterado.");
+            }
+            return manifest;
         }
     }
 }

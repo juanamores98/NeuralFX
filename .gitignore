@@ -13,3 +13,8 @@ TestResults/
 # Temporary files
 *.tmp
 *.log
+Native/upstream/
+Native/out/
+Native/toolchain/
+Native/sdk/
+artifacts/

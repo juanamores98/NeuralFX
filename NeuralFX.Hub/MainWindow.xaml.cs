@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -10,506 +12,519 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using NeuralFX.Hub.Models;
 using NeuralFX.Hub.Services;
+using NeuralFX.Protocol;
 
 namespace NeuralFX.Hub
 {
     public partial class MainWindow : Window
     {
-        private readonly HardwareDiagnosticsService _diagnosticsService;
-        private readonly DependencyManagerService _dependencyManager;
+        private readonly HardwareDiagnosticsService _diagnosticsService = new();
+        private readonly DependencyManagerService _dependencyManager = new();
         private readonly InstallationEngineService _installEngine;
-        private readonly RollbackService _rollbackService;
-
+        private readonly UninstallService _uninstaller = new();
+        private readonly HubPreferences _preferences = HubPreferences.Load();
+        private readonly IntegrityMonitor _integrity = new();
+        private readonly Dictionary<string, IncrementalLogReader> _logReaders = new();
+        private readonly StringBuilder _hubLogs = new();
+        private readonly DispatcherTimer _liveTimer = new() { Interval = TimeSpan.FromMilliseconds(1000.0 / 30) };
+        private readonly DispatcherTimer _backgroundTimer = new() { Interval = TimeSpan.FromSeconds(2) };
         private HardwareInfo _hardwareInfo = new();
         private List<DependencyItem> _dependencies = new();
-        private readonly StringBuilder _hubLogs = new();
-        private readonly DispatcherTimer _liveLogTimer;
+        private TelemetryChannel? _channel;
+        private TelemetryFrame _lastFrame;
+        private int _pid, _revision;
+        private long _scannedRevision;
+        private long _cacheRevision = 1, _scannedCacheRevision;
+        private string? _watchedRoot;
+        private bool _busy, _polling, _diagnosing, _closed;
+        private IntegrityReport? _report;
+        private string _operationLastMessage = "";
+        private static string ModDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Colossal Order", "Cities_Skylines", "Addons", "Mods", "NeuralFX");
+        private sealed record OperationResult(bool? Success, string Title, string Detail);
+        private string? GameDirectory => _hardwareInfo.GameFound ? Path.GetDirectoryName(_hardwareInfo.GameExePath) : null;
 
         public MainWindow()
         {
             InitializeComponent();
-
-            _diagnosticsService = new HardwareDiagnosticsService();
-            _dependencyManager = new DependencyManagerService();
-            _installEngine = new InstallationEngineService(_dependencyManager);
-            _rollbackService = new RollbackService();
-
-            _liveLogTimer = new DispatcherTimer
+            _installEngine = new(_dependencyManager);
+            PresetSelector.SelectedIndex = Enum.IsDefined(_preferences.Preset) ? (int)_preferences.Preset : 0;
+            _liveTimer.Tick += (_, _) => ReadTelemetry();
+            _backgroundTimer.Tick += async (_, _) => await PollBackgroundAsync();
+            Loaded += async (_, _) =>
             {
-                Interval = TimeSpan.FromSeconds(2)
+                LogHub("NeuralFX Hub iniciado · Almacén local: " + _dependencyManager.CacheDirectory);
+                await RunFullDiagnosticsAsync();
+                _liveTimer.Start(); _backgroundTimer.Start();
+                await PollBackgroundAsync();
+                await CheckUpdatesAsync();
             };
-            _liveLogTimer.Tick += LiveLogTimer_Tick;
-
-            Loaded += MainWindow_Loaded;
+            Activated += (_, _) => { _integrity.Invalidate(); _cacheRevision++; };
+            Closing += (_, e) =>
+            {
+                if (!_busy) return;
+                e.Cancel = true;
+                SetNotice("Operación en curso", "Espera a que finalice la operación actual antes de cerrar el Hub.");
+            };
+            Closed += (_, _) => { _closed = true; _liveTimer.Stop(); _backgroundTimer.Stop(); _integrity.Dispose(); _channel?.Dispose(); };
         }
 
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        private async Task RunFullDiagnosticsAsync()
         {
-            LogHub("NeuralFX Hub v1.0.0 inicializado.");
-            LogHub($"Caché local de dependencias: {_dependencyManager.CacheDirectory}");
-            RunFullDiagnostics();
-            _liveLogTimer.Start();
-        }
-
-        private void RunFullDiagnostics()
-        {
-            LogHub("Ejecutando diagnóstico de hardware y software...");
-            _hardwareInfo = _diagnosticsService.RunDiagnostics();
-
-            // Actualizar UI Hardware
-            TxtGpuName.Text = _hardwareInfo.GpuName;
-            TxtArchitecture.Text = $"Arquitectura: {_hardwareInfo.Architecture} | DLSS 5 Soportado: {(_hardwareInfo.SupportsDLSS5 ? "SÍ (Neural Reconstruction)" : "Solo DLSS 2/3")}";
-            
-            if (_hardwareInfo.IsNvidia)
+            if (_diagnosing || _closed) return;
+            _diagnosing = true;
+            try
             {
-                TxtBadgeGpu.Text = "COMPATIBLE";
-                BadgeGpu.Background = new SolidColorBrush(Color.FromRgb(0x26, 0x4E, 0x26));
-            }
-            else
-            {
-                TxtBadgeGpu.Text = "NO NVIDIA";
-                BadgeGpu.Background = new SolidColorBrush(Color.FromRgb(0x8C, 0x24, 0x24));
-            }
-
-            TxtVram.Text = _hardwareInfo.VramDisplay;
-            if (_hardwareInfo.VramGB >= 8.0)
-            {
-                TxtBadgeVram.Text = ">= 8 GB (ÓPTIMO)";
-                BadgeVram.Background = new SolidColorBrush(Color.FromRgb(0x26, 0x4E, 0x26));
-            }
-            else if (_hardwareInfo.VramGB >= 4.0)
-            {
-                TxtBadgeVram.Text = "4-8 GB (ACEPTABLE)";
-                BadgeVram.Background = new SolidColorBrush(Color.FromRgb(0x8C, 0x6E, 0x24));
-            }
-            else
-            {
-                TxtBadgeVram.Text = "< 4 GB (INSUFICIENTE)";
-                BadgeVram.Background = new SolidColorBrush(Color.FromRgb(0x8C, 0x24, 0x24));
-            }
-
-            TxtDriverVer.Text = $"Versión NVIDIA: {_hardwareInfo.ParsedDriverVersion}";
-            TxtDriverRaw.Text = $"Driver Sistema Windows: {_hardwareInfo.RawDriverVersion}";
-            if (_hardwareInfo.DriverMeetsRequirement)
-            {
-                TxtBadgeDriver.Text = ">= 570.xx (CUMPLE)";
-                BadgeDriver.Background = new SolidColorBrush(Color.FromRgb(0x26, 0x4E, 0x26));
-            }
-            else
-            {
-                TxtBadgeDriver.Text = "< 570.xx (REQUIERE UPDATE)";
-                BadgeDriver.Background = new SolidColorBrush(Color.FromRgb(0x8C, 0x24, 0x24));
-            }
-
-            // Actualizar UI Cities Skylines
-            if (_hardwareInfo.GameFound)
-            {
-                TxtGameExe.Text = _hardwareInfo.GameExePath;
-                TxtWritePerm.Text = _hardwareInfo.CanWriteGameDir ? "SÍ (Permiso Completo)" : "NO (Requiere permisos de Admin)";
-                TxtWritePerm.Foreground = _hardwareInfo.CanWriteGameDir 
-                    ? (SolidColorBrush)FindResource("Success") 
-                    : (SolidColorBrush)FindResource("Danger");
-
-                if (_hardwareInfo.IsGameRunning)
+                _hardwareInfo = await Task.Run(() => _diagnosticsService.RunDiagnostics(_preferences.GameExecutable));
+                TxtGpuName.Text = _hardwareInfo.GpuName;
+                TxtArchitecture.Text = "La compatibilidad con DLSS Neural Rendering se confirma activando el mod in-game.";
+                TxtBadgeGpu.Text = _hardwareInfo.DetectedArchitecture switch
                 {
-                    TxtGameProcess.Text = "EN EJECUCIÓN (Cierra el juego antes de inyectar/desinstalar)";
-                    TxtGameProcess.Foreground = (SolidColorBrush)FindResource("Danger");
-                }
-                else
+                    GpuArchitecture.Blackwell => "NVIDIA RTX BLACKWELL",
+                    GpuArchitecture.AdaLovelace => "NVIDIA RTX ADA LOVELACE",
+                    GpuArchitecture.AmpereTuring => "NVIDIA RTX AMPERE / TURING",
+                    _ => _hardwareInfo.IsNvidia ? "NVIDIA RTX / GTX" : "GPU NO NVIDIA"
+                };
+                TxtVram.Text = _hardwareInfo.VramBytes == 0 ? "Sin lectura disponible" : _hardwareInfo.VramDisplay;
+                TxtBadgeVram.Text = "VRAM DEDICADA";
+                TxtDriverVer.Text = "Driver NVIDIA: " + _hardwareInfo.ParsedDriverVersion;
+                TxtDriverRaw.Text = "Driver SO: " + _hardwareInfo.RawDriverVersion;
+                TxtBadgeDriver.Text = "CONTROLADOR";
+                TxtGameExe.Text = _hardwareInfo.GameFound ? _hardwareInfo.GameExePath : _preferences.GameExecutable ?? "No localizado automáticamente. Usa 'Elegir Cities.exe'.";
+                TxtWritePerm.Text = !_hardwareInfo.GameFound ? "N/A" : _hardwareInfo.CanWriteGameDir ? "Correcto (Escritura habilitada)" : "Bloqueado (Requiere permisos de administrador)";
+                TxtAppLocations.Text = "• Hub: " + AppContext.BaseDirectory + "\n• Mod de Unity: " +
+                    (File.Exists(Path.Combine(ModDirectory, "NeuralFX.dll")) ? "Detectado en Addons/Mods/NeuralFX (Activar en Gestor de contenido de CS1)\n" : "Pendiente de instalación (Se despliega automáticamente al pulsar Instalar)\n") +
+                    "• Almacén local de runtimes: " + _dependencyManager.CacheDirectory;
+                UpdateProcessState();
+                await RefreshDependenciesAsync();
+                if (GameDirectory is string root && _watchedRoot != root)
                 {
-                    TxtGameProcess.Text = "CERRADO (Listo para inyección o rollback)";
-                    TxtGameProcess.Foreground = (SolidColorBrush)FindResource("Success");
+                    _watchedRoot = root;
+                    _report = null; _scannedRevision = 0;
+                    _integrity.Watch(root, _dependencies.SelectMany(x => _dependencyManager.GetPackageFiles(x).Values)
+                        .Concat(new[] { "dlss5-feed.cfg", "ReShade.ini", "ReShadePreset.ini", "reshade-shaders/Shaders/NeuralFX_CAS.fx" }));
                 }
+                _integrity.Invalidate();
             }
-            else
-            {
-                TxtGameExe.Text = "No detectado automáticamente en Steam.";
-                TxtWritePerm.Text = "N/A";
-                TxtGameProcess.Text = "N/A";
-            }
-
-            RefreshDependenciesList();
-            UpdateInjectionStatusPill();
+            catch (Exception ex) { LogHub("Diagnóstico: " + ex.Message); SetNotice("No se pudo completar el diagnóstico", ex.Message, false); }
+            finally { _diagnosing = false; }
         }
 
-        private void RefreshDependenciesList()
+        private async Task RefreshDependenciesAsync()
         {
-            string? gameDir = _hardwareInfo.GameFound ? Path.GetDirectoryName(_hardwareInfo.GameExePath) : null;
-            _dependencies = _dependencyManager.GetInitialDependencies(gameDir);
-            ListDependencies.ItemsSource = null;
+            string? root = GameDirectory;
+            long revision = _cacheRevision;
+            var dependencies = await Task.Run(() => _dependencyManager.GetInitialDependencies(root, _hardwareInfo));
+            if (_closed || root != GameDirectory) return;
+            _dependencies = dependencies; _scannedCacheRevision = revision;
             ListDependencies.ItemsSource = _dependencies;
         }
 
-        private void UpdateInjectionStatusPill()
+        private void UpdateProcessState()
         {
-            if (!_hardwareInfo.GameFound)
+            TxtGameProcess.Text = _hardwareInfo.IsGameRunning ? "EN EJECUCIÓN (Cierra Cities: Skylines para modificar archivos)" : "CERRADO (Listo para instalar o desinstalar)";
+            TxtGameProcess.Foreground = (Brush)FindResource(_hardwareInfo.IsGameRunning ? "Danger" : "Success");
+        }
+
+        private async Task PollBackgroundAsync()
+        {
+            if (_polling || _closed || _busy || _diagnosing) return;
+            _polling = true;
+            try
             {
-                TxtGameStatus.Text = "ESTADO: JUEGO NO LOCALIZADO";
-                PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0x50));
+                string? root = GameDirectory;
+                if (_cacheRevision != _scannedCacheRevision)
+                { await RefreshDependenciesAsync(); _integrity.Invalidate(); }
+                int pid = await Task.Run(() => FindGameProcess(_hardwareInfo.GameExePath));
+                if (_closed || root != GameDirectory) return;
+                _hardwareInfo.IsGameRunning = pid != 0; UpdateProcessState();
+                if (pid != _pid || _channel == null)
+                {
+                    _channel?.Dispose(); _channel = pid > 0 ? TelemetryChannel.Open(pid, false) : null; _pid = pid; _lastFrame = default;
+                }
+                long revision = _integrity.Revision;
+                if (root != null && revision != _scannedRevision)
+                {
+                    string[] paths = _dependencies.SelectMany(x => _dependencyManager.GetPackageFiles(x).Values).ToArray();
+                    var report = await Task.Run(() => IntegrityMonitor.Scan(root, paths));
+                    if (_closed || root != GameDirectory) return;
+                    _report = report;
+                    _scannedRevision = revision;
+                    foreach (var item in _dependencies) InstallationStatus.Apply(item, _dependencyManager.GetPackageFiles(item).Values, report);
+                }
+                if (root == null) _report = null;
+                UpdateInstallationView();
+                string? logPath = root == null ? null : RadioLogReShade.IsChecked == true ? Path.Combine(root, "ReShade.log") : RadioLogFeeder.IsChecked == true ? Path.Combine(root, "dlss5-feed.log") : null;
+                if (logPath != null)
+                {
+                    if (!_logReaders.TryGetValue(logPath, out var reader)) _logReaders[logPath] = reader = new();
+                    string content = await Task.Run(() => reader.Read(logPath));
+                    if (!_closed && (RadioLogReShade.IsChecked == true && Path.GetFileName(logPath) == "ReShade.log" || RadioLogFeeder.IsChecked == true && Path.GetFileName(logPath) == "dlss5-feed.log")) ShowLog(content);
+                }
+            }
+            catch (Exception ex) { LogHub("Monitor: " + ex.Message); SetNotice("No se pudo actualizar el estado", ex.Message, false); }
+            finally { _polling = false; }
+        }
+
+        private void UpdateInstallationView()
+        {
+            if (GameDirectory is not string root)
+            {
+                TxtGameStatus.Text = "JUEGO NO LOCALIZADO";
+                PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(192, 57, 43));
+                TxtPipelineStatusTitle.Text = "Cities.exe no encontrado";
+                TxtPipelineStatusSubtitle.Text = "Selecciona la carpeta o el ejecutable Cities.exe en la pestaña 'Entorno y Diagnóstico'.";
+                BtnInstall.IsEnabled = false;
+                BtnUninstall.IsEnabled = false;
                 return;
             }
 
-            string gameDir = Path.GetDirectoryName(_hardwareInfo.GameExePath)!;
-            bool active = _rollbackService.IsInjectionActive(gameDir);
+            var guidance = InstallationGuidance.Create(true, _hardwareInfo.CanWriteGameDir, _hardwareInfo.IsGameRunning, _report, _dependencies);
+            bool hasArtifacts = PipelineFootprint.HasArtifacts(root) || Directory.Exists(Path.Combine(root, ".neuralfx-transaction"));
+            bool isVerified = _report is { Managed: true, Valid: true, NeedsRepair: false };
+            bool isLegacyOrIncomplete = _report != null && (_report.NeedsRepair || _report.CanMigrate || (hasArtifacts && !isVerified));
 
-            if (active)
+            if (isVerified)
             {
-                TxtGameStatus.Text = "ESTADO: INYECCIÓN DLSS 5 / RESHADE ACTIVA";
-                PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(0x0E, 0x63, 0x9C));
-                BtnInstall.Content = "Actualizar / Re-inyectar Pipeline";
+                // Si el pipeline está verificado, asegurar que NeuralFX.dll esté en Addons/Mods para Skyve y el juego
+                string modDllPath = Path.Combine(ModDirectory, "NeuralFX.dll");
+                if (!File.Exists(modDllPath))
+                {
+                    EnsureModDeployed();
+                }
+
+                TxtGameStatus.Text = "INSTALADO Y ACTIVO";
+                PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(39, 174, 96));
+                TxtPipelineStatusTitle.Text = "Pipeline Neural Activo y Configurado";
+                TxtPipelineStatusSubtitle.Text = "ReShade 6.8, Addons y DLSS Neural Rendering están instalados y verificados en Cities: Skylines. Todo listo para jugar.";
+                BtnInstall.Content = "Actualizar / Reinstalar";
+                BtnInstall.Background = new SolidColorBrush(Color.FromRgb(41, 128, 185));
+                BtnInstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && guidance.CanInstall;
+                BtnUninstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && _hardwareInfo.CanWriteGameDir;
+            }
+            else if (isLegacyOrIncomplete)
+            {
+                TxtGameStatus.Text = "INSTALACIÓN INCOMPLETA";
+                PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(211, 84, 0));
+                TxtPipelineStatusTitle.Text = "Instalación Incompleta o con Componentes Desactualizados";
+                TxtPipelineStatusSubtitle.Text = "Se detectaron archivos en el juego que requieren actualización o faltan componentes. Pulsa 'Reparar' para completarlo.";
+                BtnInstall.Content = "Reparar / Completar Instalación";
+                BtnInstall.Background = new SolidColorBrush(Color.FromRgb(211, 84, 0));
+                BtnInstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && guidance.CanInstall;
+                BtnUninstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && _hardwareInfo.CanWriteGameDir;
             }
             else
             {
-                TxtGameStatus.Text = "ESTADO: VANILLA LIMPIO (Zero-Trace)";
-                PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(0x26, 0x4E, 0x26));
-                BtnInstall.Content = "Instalar / Inyectar Pipeline DLSS 5";
+                TxtGameStatus.Text = "NO INSTALADO (VANILLA)";
+                PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(74, 74, 79));
+                TxtPipelineStatusTitle.Text = "Cities: Skylines sin Inyecciones (Vanilla)";
+                TxtPipelineStatusSubtitle.Text = "El directorio del juego está completamente limpio. Pulsa 'Instalar en el Juego' para configurar el pipeline de escalado.";
+                BtnInstall.Content = "Instalar en el Juego";
+                BtnInstall.Background = new SolidColorBrush(Color.FromRgb(39, 174, 96));
+                BtnInstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && guidance.CanInstall;
+                BtnUninstall.IsEnabled = false;
             }
+
+            BtnDownloadAllPublic.IsEnabled = _dependencies.Any(x => x.CanDownload);
+            BtnAutoDetectDownloads.IsEnabled = _dependencies.Any(x => x.CanImport && !x.IsReady);
+
+            TxtIntegrity.Text = _report == null ? "Elige la carpeta del juego y vuelve a analizar." :
+                (!_report.Managed ? "No hay una instalación registrada activa. El juego se encuentra limpio o con archivos sin registrar." :
+                    _report.Details.Length == 0 ? "Todos los archivos registrados coinciden exactamente con sus firmas de seguridad." : string.Join("\n", _report.Details)) +
+                "\n\nLa integridad de archivos confirma que los binarios están listos para la inyección D3D11.";
         }
 
-        private void BtnRefreshDiagnostics_Click(object sender, RoutedEventArgs e)
+        private static int FindGameProcess(string expectedPath)
         {
-            RunFullDiagnostics();
+            foreach (var process in Process.GetProcessesByName("Cities"))
+            {
+                using (process)
+                {
+                    try { if (string.Equals(process.MainModule?.FileName, expectedPath, StringComparison.OrdinalIgnoreCase)) return process.Id; }
+                    catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { }
+                }
+            }
+            return 0;
         }
 
-        private void BtnBrowseGame_Click(object sender, RoutedEventArgs e)
+        private void ReadTelemetry()
         {
-            var dlg = new OpenFileDialog
+            if (_channel == null || !_channel.TryRead(out var frame) || frame.ProcessId != _pid || !TelemetryStatus.IsFresh(frame, DateTime.UtcNow))
             {
-                Title = "Seleccionar Cities.exe",
-                Filter = "Cities.exe|Cities.exe|Todos los archivos (*.*)|*.*",
-                InitialDirectory = @"C:\Program Files (x86)\Steam\steamapps\common\Cities_Skylines"
-            };
-
-            if (dlg.ShowDialog() == true)
-            {
-                _hardwareInfo.GameExePath = dlg.FileName;
-                _hardwareInfo.GameFound = true;
-                _hardwareInfo.CanWriteGameDir = HardwareDiagnosticsService.TestDirectoryWritable(Path.GetDirectoryName(dlg.FileName)!);
-                RunFullDiagnostics();
+                TxtTelemetry.Text = _pid == 0 ? "Juego cerrado." : "Sin telemetría reciente · asegúrate de activar NeuralFX en el Gestor de contenido de Cities: Skylines.";
+                TxtSessionSummary.Text = _pid == 0 ? "Juego cerrado" : "Esperando mod in-game...";
+                TxtSessionHint.Text = _pid == 0 ? "Inicia el juego para monitorizar el rendimiento." : "Activa el mod y abre una ciudad.";
+                TelemetryCommands.IsEnabled = false; return;
             }
+            TelemetryCommands.IsEnabled = true;
+            if (_lastFrame.UtcTicks == frame.UtcTicks) return;
+            _lastFrame = frame;
+            TxtTelemetry.Text = TelemetryStatus.Describe(frame);
+            bool evaluated = (frame.Flags & RuntimeFlags.EvaluationSucceeded) != 0;
+            TxtSessionSummary.Text = evaluated ? "DLSS Neural Rendering Confirmado" : "Mod Conectado (Sin evaluación NGX)";
+            TxtSessionHint.Text = evaluated ? "Inferencia de red neural activa y entregando fotogramas reconstruidos." : "Esperando primer frame de reconstrucción neural en la cámara.";
+        }
+
+        private void BtnTelemetryCommand_Click(object sender, RoutedEventArgs e)
+        {
+            if (_channel == null || sender is not Button button || !Enum.TryParse<CommandKind>(button.Tag?.ToString(), out var command)) return;
+            _revision = Math.Max(_revision, _lastFrame.LastCommand) + 1;
+            _channel.Send(new TelemetryCommand { Revision = _revision, Kind = command, SessionId = _lastFrame.SessionId });
+            LogHub("Comando in-game enviado: " + command + " (#" + _revision + ")");
+        }
+
+        private async void BtnRefreshDiagnostics_Click(object sender, RoutedEventArgs e) => await RunFullDiagnosticsAsync();
+
+        private async void BtnBrowseGame_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog { Title = "Seleccionar Cities.exe", Filter = "Cities.exe|Cities.exe" };
+            if (dialog.ShowDialog() != true) return;
+            _preferences.GameExecutable = dialog.FileName;
+            try { _preferences.Save(); } catch (Exception ex) { LogHub("Preferencias: " + ex.Message); }
+            await RunFullDiagnosticsAsync();
+        }
+
+        private void SetNotice(string title, string detail, bool? success = null)
+        {
+            OperationNotice.Visibility = Visibility.Visible;
+            TxtOperationTitle.Text = title; TxtOperationDetail.Text = detail;
+            OperationNotice.Background = new SolidColorBrush(success == true ? Color.FromRgb(27, 56, 43) : success == false ? Color.FromRgb(65, 39, 32) : Color.FromRgb(28, 52, 69));
+            OperationNotice.BorderBrush = new SolidColorBrush(success == true ? Color.FromRgb(78, 150, 113) : success == false ? Color.FromRgb(188, 123, 88) : Color.FromRgb(73, 125, 156));
+        }
+
+        private async Task PerformAsync(string title, Func<Task<OperationResult>> action)
+        {
+            if (_busy) return;
+            _busy = true; _operationLastMessage = "";
+            PipelineActions.IsEnabled = false; BtnBrowseGame.IsEnabled = false; BtnRefreshDiagnostics.IsEnabled = false;
+            SetNotice(title, "Operación en curso..."); OperationProgress.Visibility = Visibility.Visible;
+            OperationResult result;
+            try
+            {
+                result = await action();
+            }
+            catch (Exception ex) { result = new(false, "No se pudo completar la operación", ex.Message + " Consulta el registro para ver el detalle."); }
+            finally
+            {
+                await RunFullDiagnosticsAsync();
+                _busy = false; PipelineActions.IsEnabled = true; BtnBrowseGame.IsEnabled = true; BtnRefreshDiagnostics.IsEnabled = true;
+                OperationProgress.Visibility = Visibility.Collapsed;
+                await PollBackgroundAsync();
+            }
+            SetNotice(result.Title, result.Detail, result.Success);
+            LogHub(result.Title + ": " + result.Detail);
         }
 
         private async void BtnDownloadSingle_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.Tag is DependencyItem item)
+            if (sender is Button { Tag: DependencyItem item }) await PerformAsync("Descargando " + item.DisplayName, async () =>
             {
-                btn.IsEnabled = false;
-                try
-                {
-                    LogHub($"Iniciando descarga individual: {item.DisplayName}...");
-                    bool ok = await _dependencyManager.DownloadDependencyAsync(item, LogHub);
-                    if (ok)
-                    {
-                        LogHub($"Descarga completada: {item.DisplayName}.");
-                    }
-                    else
-                    {
-                        LogHub($"Fallo en la descarga de {item.DisplayName}.");
-                    }
-                }
-                finally
-                {
-                    btn.IsEnabled = true;
-                    RefreshDependenciesList();
-                }
-            }
+                bool success = await _dependencyManager.DownloadDependencyAsync(item, LogHub);
+                return new(success, success ? "Descarga verificada" : "La descarga no se completó", success ? item.DisplayName + " ya está disponible en el almacén local. Listo para instalar." : item.StatusMessage);
+            });
         }
 
-        private void BtnOpenDownloads_Click(object sender, RoutedEventArgs e)
+        private async void BtnDownloadAllPublic_Click(object sender, RoutedEventArgs e) => await PerformAsync("Descargando componentes públicos", async () =>
         {
-            try
-            {
-                string userDownloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-                if (Directory.Exists(userDownloads))
-                {
-                    LogHub($"Abriendo carpeta de Descargas: {userDownloads}");
-                    Process.Start(new ProcessStartInfo("explorer.exe", userDownloads) { UseShellExecute = true });
-                }
-                else
-                {
-                    MessageBox.Show("No se encontró la carpeta de Descargas del usuario.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHub($"Error abriendo carpeta de Descargas: {ex.Message}");
-            }
-        }
+            int needed = _dependencies.Count(x => x.CanDownload);
+            int count = await _dependencyManager.DownloadAllPublicMissingAsync(_dependencies, LogHub);
+            return new(count == needed, count == needed ? "Descargas completadas" : "Descarga parcial", $"{count} de {needed} componentes descargados y verificados con éxito en el almacén local.");
+        });
 
-        private void BtnOpenWebOfficial_Click(object sender, RoutedEventArgs e)
+        private async void BtnAutoDetectDownloads_Click(object sender, RoutedEventArgs e) => await PerformAsync("Buscando archivos en Descargas", async () =>
         {
-            if (sender is Button btn && btn.Tag is DependencyItem item && !string.IsNullOrEmpty(item.OfficialWebUrl))
-            {
-                try
-                {
-                    if (item.Category == DependencyCategory.NvidiaProprietary)
-                    {
-                        LogHub($"[GUÍA NVIDIA] Abriendo enlace oficial: {item.OfficialWebUrl}");
-                        LogHub("Consejo: Descarga la DLL o ZIP y guárdalo en tu carpeta 'Descargas'. NeuralFX Hub lo detectará automáticamente.");
-                    }
-                    else
-                    {
-                        LogHub($"Abriendo enlace web oficial: {item.OfficialWebUrl}");
-                    }
-                    Process.Start(new ProcessStartInfo(item.OfficialWebUrl) { UseShellExecute = true });
-                }
-                catch (Exception ex)
-                {
-                    LogHub($"Error abriendo navegador: {ex.Message}");
-                }
-            }
-        }
-
-        private async void BtnDownloadAllPublic_Click(object sender, RoutedEventArgs e)
-        {
-            BtnDownloadAllPublic.IsEnabled = false;
-            try
-            {
-                LogHub("Iniciando descarga por lotes de componentes públicos (ReShade + DLSS5-Feeder)...");
-                int downloaded = await _dependencyManager.DownloadAllPublicMissingAsync(_dependencies, LogHub);
-                LogHub($"Proceso completado. Se descargaron {downloaded} componentes.");
-                RefreshDependenciesList();
-                if (downloaded > 0)
-                {
-                    MessageBox.Show($"Se descargaron e integraron exitosamente {downloaded} componentes públicos en la caché.", "Descarga Exitosa", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-                else
-                {
-                    MessageBox.Show("Todos los componentes públicos ya se encuentran en la caché o instalados.", "Información", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHub($"Error en descarga por lotes: {ex.Message}");
-            }
-            finally
-            {
-                BtnDownloadAllPublic.IsEnabled = true;
-            }
-        }
-
-        private void BtnAutoDetectDownloads_Click(object sender, RoutedEventArgs e)
-        {
-            LogHub("Buscando binarios y archivos ZIP en la carpeta de Descargas del usuario...");
-            _dependencyManager.AutoDetectAndImportFromDownloads(_dependencies, LogHub);
-            RefreshDependenciesList();
-            MessageBox.Show("Escaneo de la carpeta de Descargas finalizado. Revisa la lista de dependencias para verificar los elementos cargados en caché.", "Auto-detección Completada", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
+            int before = _dependencies.Count(x => x.IsReady);
+            await Task.Run(() => _dependencyManager.AutoDetectAndImportFromDownloads(_dependencies, LogHub));
+            int count = _dependencies.Count(x => x.IsReady) - before;
+            return new(count > 0, count > 0 ? "Archivos encontrados e importados" : "No se encontraron nuevos archivos en Descargas", count > 0
+                ? $"{count} componentes guardados y verificados en el almacén local. ¡Listos para instalar!"
+                : "Usa el botón 'Importar' en los componentes de NVIDIA para seleccionar nvngx_dlss.dll o nvngx_dlssnr.dll.");
+        });
 
         private async void BtnImportDependency_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.Tag is DependencyItem item)
+            if (sender is not Button { Tag: DependencyItem item }) return;
+            var dialog = new OpenFileDialog { Title = "Importar " + item.DisplayName, Filter = "Binarios y paquetes|*.dll;*.zip;*.exe;*.addon64|Todos los archivos|*.*" };
+            if (dialog.ShowDialog() != true) return;
+            await PerformAsync("Importando " + item.DisplayName, async () =>
             {
-                var dlg = new OpenFileDialog
-                {
-                    Title = $"Importar archivo para {item.DisplayName}",
-                    Filter = "Archivos compatibles (*.dll;*.zip;*.exe)|*.dll;*.zip;*.exe|Librerías DLL (*.dll)|*.dll|Archivos ZIP (*.zip)|*.zip|Todos los archivos (*.*)|*.*",
-                    InitialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads")
-                };
-
-                if (dlg.ShowDialog() == true)
-                {
-                    LogHub($"Importando {dlg.FileName} para {item.Id}...");
-                    bool success = await _dependencyManager.ImportFileAsync(item, dlg.FileName);
-                    if (success)
-                    {
-                        LogHub($"Archivo {Path.GetFileName(dlg.FileName)} importado a la caché con éxito.");
-                        RefreshDependenciesList();
-                    }
-                    else
-                    {
-                        LogHub($"Error al importar {dlg.FileName}.");
-                    }
-                }
-            }
+                bool success = await _dependencyManager.ImportFileAsync(item, dialog.FileName);
+                return new(success, success ? "Archivo importado y verificado" : "Importación rechazada", success ? item.DisplayName + " está listo en el almacén local. Pulsa 'Instalar' para aplicarlo al juego." : item.StatusMessage);
+            });
         }
 
         private async void BtnInstall_Click(object sender, RoutedEventArgs e)
         {
-            if (!_hardwareInfo.GameFound)
+            if (GameDirectory is not string root) return;
+            await PerformAsync("Instalando y verificando archivos del juego", async () =>
             {
-                MessageBox.Show("No se ha localizado Cities.exe. Por favor localiza el juego antes de instalar.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+                var preset = (PipelinePreset)PresetSelector.SelectedIndex;
+                bool success = await _installEngine.InstallAsync(root, _dependencies, LogHub, preset: preset);
+                if (!success) return new(false, "La instalación no se completó", _operationLastMessage);
 
-            if (HardwareDiagnosticsService.IsCitiesSkylinesRunning())
-            {
-                MessageBox.Show("Cities: Skylines se encuentra actualmente en ejecución.\n\nPor favor cierra completamente el juego antes de proceder para que Windows permita escribir y registrar las librerías nativas.", "Cierra el Juego", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+                // Asegurar que NeuralFX.dll esté desplegado en la carpeta de Mods
+                EnsureModDeployed();
 
-            var result = MessageBox.Show(
-                "¿Deseas proceder con la inyección del pipeline DLSS 5 y ReShade en Cities: Skylines?\n\nSe creará un manifiesto atómico (NeuralFX_Manifest.json) que permitirá rollback 100% limpio en cualquier momento.",
-                "Confirmar Inyección",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
+                var verified = await Task.Run(() => IntegrityMonitor.Scan(root, _dependencies.SelectMany(x => _dependencyManager.GetPackageFiles(x).Values)));
+                _preferences.Preset = preset;
+                try { _preferences.Save(); } catch (Exception ex) { LogHub("No se pudo recordar el preset: " + ex.Message); }
+                _integrity.Invalidate();
 
-            if (result != MessageBoxResult.Yes)
-                return;
+                string presetName = (PresetSelector.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? preset.ToString();
+                return new(true, "Pipeline instalado y verificado", "Componentes aplicados correctamente con perfil: " + presetName + ".\nInicia Cities: Skylines para disfrutar del escalado neural.");
+            });
+        }
 
-            string gameDir = Path.GetDirectoryName(_hardwareInfo.GameExePath)!;
-            BtnInstall.IsEnabled = false;
-            BtnRollback.IsEnabled = false;
-
+        private void EnsureModDeployed()
+        {
             try
             {
-                bool success = await _installEngine.InstallAsync(gameDir, _dependencies, LogHub);
-                if (success)
+                string targetDir = ModDirectory;
+                if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
+                string targetDll = Path.Combine(targetDir, "NeuralFX.dll");
+
+                // Prioridad 1: Recurso embebido en el propio ensamblado del Hub
+                var asm = System.Reflection.Assembly.GetExecutingAssembly();
+                using (var stream = asm.GetManifestResourceStream("NeuralFX.Mod.Assembly"))
                 {
-                    MessageBox.Show("Pipeline DLSS 5 instalado con éxito.\n\nPuedes ejecutar Cities: Skylines ahora.\n- Pulsa Home para ReShade.\n- Pulsa Ctrl + Alt + N para el panel de telemetría de NeuralFX Mod.", "Instalación Exitosa", MessageBoxButton.OK, MessageBoxImage.Information);
+                    if (stream != null)
+                    {
+                        using (var file = File.Create(targetDll))
+                        {
+                            stream.CopyTo(file);
+                        }
+                        LogHub("Desplegado mod integrado (recurso embebido): " + targetDll);
+                        return;
+                    }
                 }
-                else
+
+                // Prioridad 2: Buscar en rutas relativas locales o compilación
+                string[] searchLocations =
                 {
-                    MessageBox.Show("Ocurrió un error o faltan dependencias obligatorias. Revisa el registro en la pestaña de Logs.", "Error en Instalación", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Path.Combine(AppContext.BaseDirectory, "NeuralFX.dll"),
+                    Path.Combine(AppContext.BaseDirectory, "..", "NeuralFX.dll"),
+                    Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "NeuralFX.Mod", "bin", "Release", "net35", "NeuralFX.dll"),
+                    Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "NeuralFX.Mod", "bin", "Debug", "net35", "NeuralFX.dll")
+                };
+
+                foreach (string candidate in searchLocations)
+                {
+                    if (File.Exists(candidate))
+                    {
+                        File.Copy(candidate, targetDll, true);
+                        LogHub("Desplegado mod gestionado: " + targetDll);
+                        return;
+                    }
                 }
             }
-            finally
+            catch (Exception ex)
             {
-                BtnInstall.IsEnabled = true;
-                BtnRollback.IsEnabled = true;
-                RunFullDiagnostics();
+                LogHub("Aviso al verificar mod en Addons/Mods: " + ex.Message);
             }
         }
 
-        private async void BtnRollback_Click(object sender, RoutedEventArgs e)
+        private async void BtnUninstall_Click(object sender, RoutedEventArgs e)
         {
-            if (!_hardwareInfo.GameFound)
+            if (GameDirectory is not string root) return;
+            if (_hardwareInfo.IsGameRunning)
             {
-                MessageBox.Show("No se ha localizado Cities.exe.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Por favor cierra Cities: Skylines antes de desinstalar.", "Juego en ejecución", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            if (HardwareDiagnosticsService.IsCitiesSkylinesRunning())
-            {
-                MessageBox.Show("Cities: Skylines se encuentra actualmente en ejecución.\n\nPor favor cierra completamente el juego antes de proceder con el rollback para liberar los archivos nativos.", "Cierra el Juego", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var result = MessageBox.Show(
-                "¿Deseas desinstalar completamente el pipeline y restaurar Cities: Skylines a estado vanilla?\n\nSe eliminarán todos los binarios inyectados (dxgi.dll, DLSS5-Feeder, shaders, configs y logs) sin dejar rastro alguno.",
-                "Confirmar Rollback Atómico",
+            var confirm = MessageBox.Show(
+                "¿Deseas desinstalar completamente NeuralFX y ReShade de Cities: Skylines?\n\n" +
+                "• Se eliminarán todos los archivos inyectados: dxgi.dll, addons, DLLs de DLSS, shaders y configuraciones.\n" +
+                "• Se retirará el mod NeuralFX de la carpeta Addons/Mods.\n" +
+                "• Cities: Skylines volverá a su estado 100% original (Vanilla).\n\n" +
+                "Cualquier archivo de usuario previo se respaldará silenciosamente fuera del juego.\n\n" +
+                "¿Continuar con la desinstalación completa?",
+                "Desinstalación 100% Zero-Trace · NeuralFX",
                 MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
+                MessageBoxImage.Question);
 
-            if (result != MessageBoxResult.Yes)
-                return;
+            if (confirm != MessageBoxResult.Yes) return;
 
-            string gameDir = Path.GetDirectoryName(_hardwareInfo.GameExePath)!;
-            BtnInstall.IsEnabled = false;
-            BtnRollback.IsEnabled = false;
-
-            try
+            await PerformAsync("Desinstalando NeuralFX y ReShade del juego", async () =>
             {
-                bool clean = await _rollbackService.RollbackAsync(gameDir, LogHub);
-                if (clean)
+                await _uninstaller.RecoverAsync(root);
+                var plan = await Task.Run(() => UninstallService.Inspect(root));
+                var result = await _uninstaller.UninstallAsync(plan, LogHub);
+
+                // Retirar completamente la carpeta del mod en Addons/Mods para que Skyve y el juego queden limpios
+                if (Directory.Exists(ModDirectory))
                 {
-                    MessageBox.Show("Rollback completado con éxito. El juego ha quedado en estado Vanilla Zero-Trace.", "Rollback Exitoso", MessageBoxButton.OK, MessageBoxImage.Information);
+                    try
+                    {
+                        Directory.Delete(ModDirectory, true);
+                        LogHub("Retirada carpeta completa del mod: " + ModDirectory);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHub("Aviso al retirar carpeta del mod: " + ex.Message);
+                    }
                 }
-                else
-                {
-                    MessageBox.Show("Rollback finalizado con advertencias. Revisa los detalles en la pestaña de logs.", "Aviso de Rollback", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            }
-            finally
-            {
-                BtnInstall.IsEnabled = true;
-                BtnRollback.IsEnabled = true;
-                RunFullDiagnostics();
-            }
+
+                _integrity.Invalidate();
+                return new(result.Success, result.Success ? "Juego 100% Limpio (Vanilla)" : "Desinstalación incompleta",
+                    result.Success ? "Se eliminaron todos los componentes inyectados de Cities: Skylines. El juego ha quedado en estado vanilla." : result.Message);
+            });
         }
 
         private void LogHub(string message)
         {
-            Dispatcher.Invoke(() =>
+            if (_busy) _operationLastMessage = message;
+            if (_closed) return;
+            Dispatcher.InvokeAsync(() =>
             {
-                _hubLogs.AppendLine(message);
-                if (RadioLogHub != null && RadioLogHub.IsChecked == true && TxtLogConsole != null)
-                {
-                    TxtLogConsole.Text = _hubLogs.ToString();
-                    TxtLogConsole.ScrollToEnd();
-                }
+                _hubLogs.AppendLine(DateTime.Now.ToString("HH:mm:ss") + " " + message);
+                if (_hubLogs.Length > IncrementalLogReader.Limit) _hubLogs.Remove(0, _hubLogs.Length - IncrementalLogReader.Limit);
+                if (RadioLogHub != null && RadioLogHub.IsChecked == true && TxtLogConsole != null) ShowLog(_hubLogs.ToString());
             });
         }
 
-        private void LiveLogTimer_Tick(object? sender, EventArgs e)
+        private void ShowLog(string text)
         {
-            if (TxtLogConsole == null) return;
-            if (!_hardwareInfo.GameFound) return;
-            string gameDir = Path.GetDirectoryName(_hardwareInfo.GameExePath)!;
-
-            if (RadioLogReShade != null && RadioLogReShade.IsChecked == true)
-            {
-                string path = Path.Combine(gameDir, "ReShade.log");
-                ReadLogFileSafe(path);
-            }
-            else if (RadioLogFeeder != null && RadioLogFeeder.IsChecked == true)
-            {
-                string path = Path.Combine(gameDir, "dlss5-feed.log");
-                ReadLogFileSafe(path);
-            }
+            if (TxtLogConsole == null || TxtLogConsole.Text == text) return;
+            TxtLogConsole.Text = text; TxtLogConsole.ScrollToEnd();
         }
 
-        private void ReadLogFileSafe(string path)
+        private async void RadioLog_Checked(object sender, RoutedEventArgs e)
         {
-            if (TxtLogConsole == null) return;
-
-            if (!File.Exists(path))
-            {
-                TxtLogConsole.Text = $"[Archivo {Path.GetFileName(path)} no encontrado en {Path.GetDirectoryName(path)}]";
-                return;
-            }
-
-            try
-            {
-                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                using var reader = new StreamReader(fs, Encoding.UTF8);
-                string content = reader.ReadToEnd();
-                TxtLogConsole.Text = content;
-                TxtLogConsole.ScrollToEnd();
-            }
-            catch (Exception ex)
-            {
-                TxtLogConsole.Text = $"Error leyendo {Path.GetFileName(path)}: {ex.Message}";
-            }
-        }
-
-        private void RadioLog_Checked(object sender, RoutedEventArgs e)
-        {
-            if (RadioLogHub == null || TxtLogConsole == null) return;
-
-            if (RadioLogHub.IsChecked == true)
-            {
-                TxtLogConsole.Text = _hubLogs?.ToString() ?? string.Empty;
-                TxtLogConsole.ScrollToEnd();
-            }
-            else
-            {
-                LiveLogTimer_Tick(null, EventArgs.Empty);
-            }
+            if (!IsLoaded || RadioLogHub == null || TxtLogConsole == null) return;
+            if (RadioLogHub.IsChecked == true) ShowLog(_hubLogs.ToString());
+            else await PollBackgroundAsync();
         }
 
         private void BtnClearLog_Click(object sender, RoutedEventArgs e)
         {
             if (TxtLogConsole == null) return;
-
-            if (RadioLogHub != null && RadioLogHub.IsChecked == true)
-            {
-                _hubLogs.Clear();
-                TxtLogConsole.Text = string.Empty;
-            }
-            else
-            {
-                TxtLogConsole.Text = string.Empty;
-            }
+            if (RadioLogHub?.IsChecked == true) _hubLogs.Clear();
+            TxtLogConsole.Clear();
         }
 
-        private void BtnOpenGameFolder_Click(object sender, RoutedEventArgs e)
+        private void OpenLocation(string path)
         {
-            if (_hardwareInfo.GameFound)
-            {
-                string dir = Path.GetDirectoryName(_hardwareInfo.GameExePath)!;
-                Process.Start(new ProcessStartInfo("explorer.exe", dir) { UseShellExecute = true });
-            }
+            try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
+            catch (Exception ex) { LogHub(ex.Message); }
         }
+
+        private void BtnOpenDownloads_Click(object sender, RoutedEventArgs e) => OpenLocation(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"));
+        private void BtnOpenCache_Click(object sender, RoutedEventArgs e) => OpenLocation(_dependencyManager.CacheDirectory);
+        private void BtnOpenModFolder_Click(object sender, RoutedEventArgs e) => OpenLocation(ModDirectory);
+        private void BtnShowLogs_Click(object sender, RoutedEventArgs e) { MainTabs.SelectedIndex = 3; RadioLogHub.IsChecked = true; }
+        private void BtnOpenGameFolder_Click(object sender, RoutedEventArgs e) { if (GameDirectory is string root) OpenLocation(root); }
+
+        private void BtnOpenWebOfficial_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button { Tag: DependencyItem item } && Uri.TryCreate(item.OfficialWebUrl, UriKind.Absolute, out var uri) && uri.Scheme == "https") OpenLocation(uri.AbsoluteUri);
+        }
+
+        private async Task CheckUpdatesAsync()
+        {
+            try { TxtUpdates.Text = await new ReleaseUpdateService().CheckAsync(_dependencies); }
+            catch (Exception ex) { TxtUpdates.Text = "No se pudieron consultar novedades: " + ex.Message; }
+        }
+
+        private async void BtnCheckUpdates_Click(object sender, RoutedEventArgs e) => await CheckUpdatesAsync();
     }
 }

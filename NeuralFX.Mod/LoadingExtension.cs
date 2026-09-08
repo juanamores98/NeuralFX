@@ -19,7 +19,6 @@ namespace NeuralFX
             {
                 _managerObject = new GameObject("NeuralFX_Manager");
                 _managerObject.AddComponent<NeuralFXManager>();
-                Object.DontDestroyOnLoad(_managerObject);
             }
             else
             {
@@ -43,6 +42,7 @@ namespace NeuralFX
         public override void OnLevelUnloading()
         {
             UuiButton.Unregister();
+            if (_managerObject != null) { Object.Destroy(_managerObject); _managerObject = null; }
             base.OnLevelUnloading();
         }
     }

@@ -21,6 +21,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NeuralFX.Hub\NeuralFX.Hub.csproj" />
+    <ProjectReference Include="..\NeuralFX.ProcessFixture\NeuralFX.ProcessFixture.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+  <Target Name="CopyProcessFixture" AfterTargets="Build">
+    <ItemGroup><_FixtureFiles Include="../NeuralFX.ProcessFixture/bin/$(Configuration)/net8.0-windows/*" /></ItemGroup>
+    <Copy SourceFiles="@(_FixtureFiles)" DestinationFolder="$(OutDir)ProcessFixture" />
+  </Target>
 
 </Project>

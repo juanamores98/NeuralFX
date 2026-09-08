@@ -22,15 +22,15 @@ namespace NeuralFX.Options
         {
             var group = helper.AddGroup("Estado del Pipeline DLSS 5");
 
-            bool dxgi = NativeInterop.IsModuleLoaded("dxgi.dll");
+            bool dxgi = NativeInterop.IsReShadeHooked();
             bool feeder = NativeInterop.IsModuleLoaded("dlss5-feed.addon64");
             bool pipelineActive = dxgi && feeder;
 
             // Pipeline Status
             if (pipelineActive)
             {
-                AddStatusLabel(group, "✔ Pipeline Gráfico: ACTIVO (ReShade y DLSS5-Feeder conectados)", new Color32(78, 201, 176, 255));
-                AddNoteLabel(group, "DirectX 11 está comunicando los buffers de render al runtime neural correctamente.");
+                AddStatusLabel(group, "✔ Módulos cargados: ReShade y DLSS5-Feeder", new Color32(78, 201, 176, 255));
+                AddNoteLabel(group, "La carga de módulos no confirma buffers válidos ni evaluaciones NGX. Consulta la telemetría y los logs.");
             }
             else if (dxgi)
             {
@@ -39,8 +39,8 @@ namespace NeuralFX.Options
             }
             else
             {
-                AddStatusLabel(group, "○ Pipeline Gráfico: NO INYECTADO (Modo Vanilla Limpio)", new Color32(180, 190, 200, 255));
-                AddNoteLabel(group, "El juego se encuentra en estado original vanilla sin hooks inyectados. Abre NeuralFX Hub si deseas instalar el pipeline DLSS 5.");
+                AddStatusLabel(group, "○ ReShade local: SIN DETECTAR", new Color32(180, 190, 200, 255));
+                AddNoteLabel(group, "Abre NeuralFX Hub para comprobar los componentes instalados.");
             }
 
             AddSpacing(group, 6f);
@@ -54,7 +54,7 @@ namespace NeuralFX.Options
 
                 if (cameraReady)
                 {
-                    AddStatusLabel(group, "✔ Vectores de Movimiento: GENERÁNDOSE CORRECTAMENTE", new Color32(78, 201, 176, 255));
+                    AddStatusLabel(group, "✔ Depth y Motion Vectors: SOLICITADOS A UNITY", new Color32(78, 201, 176, 255));
                     AddNoteLabel(group, "La cámara principal tiene activos DepthTextureMode.Depth y MotionVectors.");
                 }
                 else
@@ -74,32 +74,19 @@ namespace NeuralFX.Options
             // Anti-Aliasing Collision Status
             bool hasConflict = false;
             string conflictName = null;
-            if (cam != null)
-            {
-                foreach (var comp in cam.GetComponents<MonoBehaviour>())
-                {
-                    if (comp == null || !comp.enabled) continue;
-                    string name = comp.GetType().Name;
-                    if (name.IndexOf("Antialiasing", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        name.IndexOf("SMAA", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        name.IndexOf("TAA", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        hasConflict = true;
-                        conflictName = name;
-                        break;
-                    }
-                }
-            }
+            string[] conflicts = Rendering.AaConflictScanner.Scan(cam);
+            hasConflict = conflicts.Length > 0;
+            if (hasConflict) conflictName = string.Join(", ", conflicts);
 
             if (hasConflict)
             {
-                AddStatusLabel(group, "▲ Anti-Aliasing: CONFLICTO DETECTADO (" + conflictName + ")", new Color32(244, 71, 71, 255));
-                AddNoteLabel(group, "Desactiva el suavizado temporal del otro mod para evitar efecto de ghosting con DLSS.");
+                AddStatusLabel(group, "▲ Revisar Anti-Aliasing: " + conflictName, new Color32(245, 166, 35, 255));
+                AddNoteLabel(group, "Compara el resultado con esos filtros activados y desactivados antes de decidir su configuración.");
             }
             else
             {
-                AddStatusLabel(group, "✔ Anti-Aliasing: COMPATIBILIDAD ÓPTIMA", new Color32(78, 201, 176, 255));
-                AddNoteLabel(group, "No se detectaron filtros temporales ajenos interfiriendo con la reconstrucción.");
+                AddStatusLabel(group, "✔ Anti-Aliasing: SIN COINCIDENCIAS EN EL ESCÁNER", new Color32(78, 201, 176, 255));
+                AddNoteLabel(group, "El escáner identifica componentes por nombre; no garantiza ausencia de otros filtros.");
             }
         }
 
@@ -155,6 +142,24 @@ namespace NeuralFX.Options
                 ModSettings.Save();
             });
 
+            group.AddCheckbox("Habilitar Sub-Pixel Camera Jitter (Halton 2,3 para máxima nitidez DLSS)", ModSettings.EnableCameraJitter, sel =>
+            {
+                ModSettings.EnableCameraJitter = sel;
+                ModSettings.Save();
+            });
+
+            group.AddCheckbox("Usar Vectores de Movimiento Nativos 3D de Unity (DirectX 11)", ModSettings.EnableNativeMotionVectors, sel =>
+            {
+                ModSettings.EnableNativeMotionVectors = sel;
+                ModSettings.Save();
+            });
+
+            group.AddCheckbox("Optimizar Nitidez de Texturas y Geometría (16x Anisotrópico + LOD Bias)", ModSettings.EnhanceTextureClarity, sel =>
+            {
+                ModSettings.EnhanceTextureClarity = sel;
+                ModSettings.Save();
+            });
+
             group.AddCheckbox("Avisar en pantalla si otro mod causa conflicto de Anti-Aliasing", ModSettings.WarnOnAaConflict, sel =>
             {
                 ModSettings.WarnOnAaConflict = sel;
@@ -171,7 +176,7 @@ namespace NeuralFX.Options
                 try
                 {
                     string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                    string hubPath = Path.Combine(localAppData, Path.Combine("Colossal Order", Path.Combine("Cities_Skylines", Path.Combine("Addons", Path.Combine("Mods", Path.Combine("NeuralFX", Path.Combine("Hub", "NeuralFX.Hub.exe")))))));
+                    string hubPath = Path.Combine(localAppData, Path.Combine("NeuralFX", Path.Combine("Hub", "NeuralFX.Hub.exe")));
 
                     if (File.Exists(hubPath))
                     {
@@ -187,7 +192,7 @@ namespace NeuralFX.Options
                     UnityEngine.Debug.LogWarning("[NeuralFX] Error iniciando Hub: " + ex.Message);
                 }
             });
-            AddNoteLabel(group, "Abre la herramienta para diagnósticos de hardware, VRAM de 64 bits y rollback limpio a vanilla.");
+            AddNoteLabel(group, "Abre la herramienta para diagnóstico, instalación y restauración del estado anterior.");
 
             AddSpacing(group, 4f);
 

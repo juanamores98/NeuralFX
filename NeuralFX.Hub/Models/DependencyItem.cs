@@ -1,9 +1,11 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Collections.Generic;
 
 namespace NeuralFX.Hub.Models
 {
+    public enum ComponentGameState { Unknown, Missing, Incomplete, Unmanaged, Modified, Configured, Installed, DifferentCopy }
     public enum DependencyStatus
     {
         Missing,
@@ -30,6 +32,15 @@ namespace NeuralFX.Hub.Models
         private long _fileSize;
         private bool _isInGame = false;
         private bool _isInCache = false;
+        private ComponentGameState _gameState;
+        private string _gameStatusDetail = "Pendiente de verificación", _gameFilesDetail = "";
+        public ComponentGameState GameState
+        {
+            get => _gameState;
+            set { _gameState = value; OnPropertyChanged(); OnPropertyChanged(nameof(GameStatusText)); OnPropertyChanged(nameof(GameStatusFg)); OnPropertyChanged(nameof(GameStatusBg)); OnPropertyChanged(nameof(GameStatusBorder)); }
+        }
+        public string GameStatusDetail { get => _gameStatusDetail; set { _gameStatusDetail = value; OnPropertyChanged(); } }
+        public string GameFilesDetail { get => _gameFilesDetail; set { _gameFilesDetail = value; OnPropertyChanged(); } }
 
         public string Id { get; set; } = string.Empty;
         public string DisplayName { get; set; } = string.Empty;
@@ -45,6 +56,13 @@ namespace NeuralFX.Hub.Models
         public string? ArchiveExtractFileName { get; set; }
         public string[]? Aliases { get; set; }
         public string? ExpectedSha256 { get; set; }
+        public string Version { get; set; } = "";
+        // Exact archive suffix -> game-relative destination, including companion resources.
+        public Dictionary<string, string> PackageFiles { get; set; } = new();
+        public string? ReleaseRepository { get; set; }
+        public string ReleaseTagPrefix { get; set; } = "";
+        public Dictionary<string, string> ExpectedFileSha256 { get; set; } = new();
+        internal Dictionary<string, string> AvailableChecksums { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public DependencyStatus Status
         {
@@ -57,6 +75,7 @@ namespace NeuralFX.Hub.Models
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(CanDownload));
                     OnPropertyChanged(nameof(IsReady));
+                    OnPropertyChanged(nameof(ImportActionText));
                 }
             }
         }
@@ -93,6 +112,7 @@ namespace NeuralFX.Hub.Models
                     OnPropertyChanged(nameof(CacheStatusBorder));
                     OnPropertyChanged(nameof(CanDownload));
                     OnPropertyChanged(nameof(IsReady));
+                    OnPropertyChanged(nameof(ImportActionText));
                 }
             }
         }
@@ -156,27 +176,39 @@ namespace NeuralFX.Hub.Models
         // UI Helpers
         public bool CanDownload => CanAutoDownload && !IsInCache && !IsDownloading;
         public bool HasOfficialWeb => !string.IsNullOrEmpty(OfficialWebUrl);
-        public bool CanImport => SourceType != "Embedded";
+        public bool CanImport => SourceType != "Embedded" && SourceType != "Bundled";
         public bool IsEmbedded => SourceType == "Embedded";
-        public bool IsReady => IsInCache || IsInGame;
+        public bool IsReady => IsInCache;
 
         // Visual Presentation Badges
-        public string GameStatusText => IsInGame ? "● INYECTADO EN JUEGO" : "○ NO INYECTADO (Vanilla)";
-        public string GameStatusFg => IsInGame ? "#4EC9B0" : "#888888";
-        public string GameStatusBg => IsInGame ? "#1B382B" : "#252528";
-        public string GameStatusBorder => IsInGame ? "#2E5A44" : "#38383C";
+        public string ImportActionText => IsInCache ? "Cambiar archivo…" : "Importar archivo…";
+        public string GameStatusText => GameState switch
+        {
+            ComponentGameState.Installed => "INSTALADO",
+            ComponentGameState.Configured => "INSTALADO · AJUSTADO",
+            ComponentGameState.DifferentCopy => "INSTALADO · OTRA COPIA",
+            ComponentGameState.Missing => "NO INSTALADO",
+            ComponentGameState.Incomplete => "INCOMPLETO",
+            ComponentGameState.Modified => "MODIFICADO",
+            ComponentGameState.Unmanaged => "SIN REGISTRO",
+            _ => "SIN VERIFICAR"
+        };
+        public string GameStatusFg => GameState is ComponentGameState.Installed or ComponentGameState.Configured ? "#75DEC6" : "#EFCA91";
+        public string GameStatusBg => GameState is ComponentGameState.Installed or ComponentGameState.Configured ? "#1B382B" : "#3A3022";
+        public string GameStatusBorder => GameState is ComponentGameState.Installed or ComponentGameState.Configured ? "#2E5A44" : "#675337";
 
         public string CacheStatusText
         {
             get
             {
-                if (IsEmbedded) return "✓ Integrado en Mod";
+                if (IsEmbedded) return "Se genera al instalar";
+                if (SourceType == "Bundled") return IsInCache ? "Incluido en el Hub" : "Falta el puente en el Hub";
                 if (IsInCache)
                 {
                     double mb = FileSize / (1024.0 * 1024.0);
-                    return mb >= 0.1 ? $"✓ En Caché ({mb:F1} MB)" : "✓ En Caché (< 0.1 MB)";
+                    return mb >= 0.1 ? $"Copia lista · {mb:F1} MB" : "Copia lista · < 0.1 MB";
                 }
-                return CanAutoDownload ? "⚠ Disponible para Descarga" : "⚠ Requiere Binario Oficial";
+                return CanAutoDownload ? "Falta descargar" : "Falta importar";
             }
         }
 

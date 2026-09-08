@@ -6,12 +6,25 @@
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>NeuralFX.Hub</RootNamespace>
     <AssemblyName>NeuralFX.Hub</AssemblyName>
+    <Version>2.0.2</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Management" Version="8.0.0" />
+    <EmbeddedResource Include="..\Native\out\dlss5-feed.addon64" LogicalName="NeuralFX.Native.Feeder" Condition="Exists('..\Native\out\dlss5-feed.addon64')" />
+    <EmbeddedResource Include="..\NeuralFX.Mod\bin\Release\net35\NeuralFX.dll" LogicalName="NeuralFX.Mod.Assembly" Condition="Exists('..\NeuralFX.Mod\bin\Release\net35\NeuralFX.dll')" />
+    <EmbeddedResource Include="Assets\**\*" />
+    <Compile Include="..\Shared\*.cs" Link="Protocol\%(Filename)%(Extension)" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NeuralFX.Mod\NeuralFX.Mod.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+
+  <Target Name="RequireNativeBridgeForPublish" BeforeTargets="Publish">
+    <Error Condition="!Exists('..\Native\out\dlss5-feed.addon64')" Text="Run Native/build.ps1 before publishing the Hub." />
+  </Target>
 
 </Project>

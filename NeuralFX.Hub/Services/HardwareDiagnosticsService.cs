@@ -8,9 +8,10 @@ namespace NeuralFX.Hub.Services
 {
     public class HardwareDiagnosticsService
     {
-        public HardwareInfo RunDiagnostics()
+        public HardwareInfo RunDiagnostics(string? preferredExecutable = null)
         {
             var info = new HardwareInfo();
+            if (!string.IsNullOrEmpty(preferredExecutable)) info.GameExePath = preferredExecutable;
 
             DetectGpuFromRegistry(info);
             DetectCitiesSkylines(info);
@@ -72,14 +73,40 @@ namespace NeuralFX.Hub.Services
                             {
                                 info.RawDriverVersion = driverVer;
                                 info.ParsedDriverVersion = ParseNvidiaDriverVersion(driverVer);
-                                if (double.TryParse(info.ParsedDriverVersion, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedVal))
-                                {
-                                    info.DriverMeetsRequirement = parsedVal >= 570.0;
-                                }
                             }
 
                             // Architecture detection
-                            AnalyzeGpuArchitecture(info);
+                            if (Regex.IsMatch(info.GpuName, @"\bRTX\s*50\d\d\b", RegexOptions.IgnoreCase))
+                            {
+                                info.DetectedArchitecture = GpuArchitecture.Blackwell;
+                                info.Architecture = "NVIDIA Blackwell (RTX 50xx · SM 120 · FP8)";
+                                info.SupportsDLSS = true;
+                            }
+                            else if (Regex.IsMatch(info.GpuName, @"\bRTX\s*40\d\d\b", RegexOptions.IgnoreCase))
+                            {
+                                info.DetectedArchitecture = GpuArchitecture.AdaLovelace;
+                                info.Architecture = "NVIDIA Ada Lovelace (RTX 40xx · SM 89 · FP16/FP8)";
+                                info.SupportsDLSS = true;
+                            }
+                            else if (Regex.IsMatch(info.GpuName, @"\bRTX\s*(20|30)\d\d\b", RegexOptions.IgnoreCase) ||
+                                     Regex.IsMatch(info.GpuName, @"\b(TITAN\s*RTX|RTX\s*A\d{4})\b", RegexOptions.IgnoreCase))
+                            {
+                                info.DetectedArchitecture = GpuArchitecture.AmpereTuring;
+                                info.Architecture = "NVIDIA Ampere / Turing (RTX 20xx/30xx · SM 75/86 · FP16)";
+                                info.SupportsDLSS = true;
+                            }
+                            else if (Regex.IsMatch(info.GpuName, @"\bRTX\b", RegexOptions.IgnoreCase))
+                            {
+                                info.DetectedArchitecture = GpuArchitecture.Blackwell;
+                                info.Architecture = "NVIDIA RTX (Arquitectura moderna · DLSS compatible)";
+                                info.SupportsDLSS = true;
+                            }
+                            else
+                            {
+                                info.DetectedArchitecture = GpuArchitecture.Unsupported;
+                                info.Architecture = "No compatible con Tensor Cores (Se requiere NVIDIA RTX)";
+                                info.SupportsDLSS = false;
+                            }
 
                             // Prefer discrete NVIDIA GPU and break
                             break;
@@ -102,7 +129,7 @@ namespace NeuralFX.Hub.Services
                 var parts = rawVersion.Split('.');
                 if (parts.Length == 4)
                 {
-                    string combined = parts[2] + parts[3];
+                    string combined = parts[2] + parts[3].PadLeft(4, '0');
                     if (combined.Length >= 5)
                     {
                         string last5 = combined.Substring(combined.Length - 5);
@@ -120,111 +147,31 @@ namespace NeuralFX.Hub.Services
             return rawVersion;
         }
 
-        private static void AnalyzeGpuArchitecture(HardwareInfo info)
-        {
-            string name = info.GpuName.ToUpperInvariant();
-
-            if (name.Contains("RTX 50") || name.Contains("RTX 5"))
-            {
-                info.Architecture = "Blackwell (RTX Serie 50xx)";
-                info.SupportsDLSS = true;
-                info.SupportsDLSS5 = true; // Native DLSS 5 Neural Reconstruction
-            }
-            else if (name.Contains("RTX 40"))
-            {
-                info.Architecture = "Ada Lovelace (RTX Serie 40xx)";
-                info.SupportsDLSS = true;
-                info.SupportsDLSS5 = true; // DLSS 3.5+ / DFC Neural Denoiser compatible
-            }
-            else if (name.Contains("RTX 30"))
-            {
-                info.Architecture = "Ampere (RTX Serie 30xx)";
-                info.SupportsDLSS = true;
-                info.SupportsDLSS5 = false; // DLSS 2/3.5 standard
-            }
-            else if (name.Contains("RTX 20") || name.Contains("TITAN RTX"))
-            {
-                info.Architecture = "Turing (RTX Serie 20xx)";
-                info.SupportsDLSS = true;
-                info.SupportsDLSS5 = false;
-            }
-            else if (name.Contains("GTX"))
-            {
-                info.Architecture = "Pascal / Turing GTX (Sin Tensor Cores)";
-                info.SupportsDLSS = false;
-                info.SupportsDLSS5 = false;
-            }
-            else
-            {
-                info.Architecture = "NVIDIA Desconocida";
-                info.SupportsDLSS = info.IsNvidia;
-            }
-        }
-
         public void DetectCitiesSkylines(HardwareInfo info)
         {
-            string[] potentialPaths =
+            // An explicit selection stays selected even if it later becomes unavailable.
+            try
             {
-                @"C:\Program Files (x86)\Steam\steamapps\common\Cities_Skylines\Cities.exe",
-                @"D:\SteamLibrary\steamapps\common\Cities_Skylines\Cities.exe",
-                @"E:\SteamLibrary\steamapps\common\Cities_Skylines\Cities.exe"
-            };
-
-            foreach (var path in potentialPaths)
-            {
-                if (File.Exists(path))
-                {
-                    info.GameExePath = path;
-                    info.GameFound = true;
-                    break;
-                }
-            }
-
-            // If not found, try reading Steam installation path from Registry
-            if (!info.GameFound)
-            {
-                try
-                {
-                    using var steamKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Valve\Steam") 
-                                         ?? Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Valve\Steam");
-                    if (steamKey != null)
-                    {
-                        var steamPath = steamKey.GetValue("InstallPath") as string;
-                        if (!string.IsNullOrEmpty(steamPath))
-                        {
-                            var candidate = Path.Combine(steamPath, @"steamapps\common\Cities_Skylines\Cities.exe");
-                            if (File.Exists(candidate))
-                            {
-                                info.GameExePath = candidate;
-                                info.GameFound = true;
-                            }
-                        }
-                    }
-                }
-                catch
-                {
-                    // Ignore registry search failure
-                }
-            }
-
-            // Test write permissions
-            if (info.GameFound)
-            {
-                info.CanWriteGameDir = TestDirectoryWritable(Path.GetDirectoryName(info.GameExePath)!);
+                if (string.IsNullOrEmpty(info.GameExePath)) info.GameExePath = SteamLibraryLocator.Find() ?? string.Empty;
+                info.GameFound = Path.GetFileName(info.GameExePath).Equals("Cities.exe", StringComparison.OrdinalIgnoreCase) && File.Exists(info.GameExePath);
+                info.CanWriteGameDir = info.GameFound && TestDirectoryWritable(Path.GetDirectoryName(info.GameExePath)!);
                 info.IsGameRunning = IsCitiesSkylinesRunning();
             }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            { info.GameFound = false; }
         }
-
         public static bool IsCitiesSkylinesRunning()
         {
             try
             {
                 var processes = System.Diagnostics.Process.GetProcessesByName("Cities");
-                return processes != null && processes.Length > 0;
+                bool running = processes.Length > 0;
+                foreach (var process in processes) process.Dispose();
+                return running;
             }
             catch
             {
-                return false;
+                return true; // Fail closed if process inspection is unavailable.
             }
         }
 

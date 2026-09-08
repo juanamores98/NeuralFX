@@ -2,6 +2,11 @@
 title NeuralFX Hub Launcher
 cd /d "%~dp0"
 
+if exist "%LOCALAPPDATA%\NeuralFX\Hub\NeuralFX.Hub.exe" (
+    start "" "%LOCALAPPDATA%\NeuralFX\Hub\NeuralFX.Hub.exe"
+    exit /b 0
+)
+
 if exist "Hub\NeuralFX.Hub.exe" (
     cd /d "%~dp0Hub"
     start "" "NeuralFX.Hub.exe"

@@ -41,11 +41,15 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" 
+                        <Border x:Name="ButtonSurface" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="1"
                                 CornerRadius="4" 
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ButtonSurface" Property="BorderBrush" Value="#A9DBF5" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ButtonSurface" Property="Opacity" Value="0.5" /></Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -54,6 +58,7 @@
                     <Setter Property="Background" Value="{StaticResource AccentHover}" />
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Cursor" Value="Arrow" />
                     <Setter Property="Background" Value="#3E3E42" />
                     <Setter Property="Foreground" Value="#888888" />
                 </Trigger>

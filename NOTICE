@@ -1,11 +1,32 @@
-NeuralFX - Suite Autónoma de Diagnóstico, Escalado Neural e Inyección Atómica para Cities: Skylines 1
+NeuralFX 2.0 — Cities: Skylines 1
 Copyright 2026 juanamores98
 
-Este proyecto es una suite independiente y modular creada para Cities: Skylines 1.
-No incluye ni redistribuye binarios propietarios de NVIDIA (nvngx_dlss.dll / nvngx_dlssnr.dll).
+Código propio: MIT No Attribution, archivo LICENSE.
 
-Agradecimientos y referencias técnicas:
-- ReShade por crosire y colaboradores (Licencia BSD 3-Clause).
-- AMD FidelityFX Contrast Adaptive Sharpening (CAS) por Advanced Micro Devices, Inc. (Licencia MIT).
-- NVIDIA DLSS / DLSS-SR / DLSS-NR marcas y tecnologías registradas por NVIDIA Corporation.
-- Cities: Skylines por Colossal Order Ltd. y Paradox Interactive.
+El addon nativo extiende DLSS5-Feeder de jlrouzies-fr, fijado al commit
+927d76d30e888bce497f5c5f8d496fcb696da335. Los cambios NeuralFX se construyen
+mediante Native/build.ps1 y Native/neuralfx_bridge.h.
+Licencia: licenses/DLSS5-Feeder-MIT.txt.
+
+Avisos de componentes usados por el feeder, sus fuentes o bibliotecas:
+- ReShade, Patrick Mours y colaboradores: licenses/ReShade-BSD.txt.
+- Dear ImGui, Omar Cornut y colaboradores: licenses/Dear-ImGui-MIT.txt.
+- MinHook, Tsuda Kageyu: licenses/MinHook-BSD.txt.
+- Puente D3D11/D3D12 de NIGos: licenses/NIGos-Bridge-MIT.txt.
+- Vulkan-Headers: licenses/Vulkan-Headers-MIT.txt.
+- NVIDIA NGX/RTX SDK: licenses/NVIDIA-SDK.txt. Sus términos corresponden
+  al SDK y al código objeto que lo incorpora; no quedan reemplazados por MIT-0.
+- AMD FidelityFX CAS: licenses/AMD-CAS-MIT.txt. NeuralFX_CAS.fx también
+  contiene el aviso MIT y usa una aproximación SDR gamma 2.
+
+Componentes descargados o aportados aparte:
+- ReShade 6.8.0 con addons, desde reshade.me.
+- RenoDX DLSS5 3.3.4 de Krish, distribuido por RankFTW/rhi-repo.
+  No se afirma que MIT-0 cubra este binario externo.
+- LumeniteFX, umar-afzaal: se obtiene del repositorio del autor con su
+  licencia. Su código no se redistribuye dentro del paquete NeuralFX.
+- nvngx_dlss.dll y nvngx_dlssnr.dll: runtimes propietarios NVIDIA aportados
+  por el usuario. No se incluyen en el paquete NeuralFX ni en el repositorio.
+
+NVIDIA, DLSS, AMD, Cities: Skylines, Colossal Order y Paradox Interactive
+son nombres o marcas de sus titulares. NeuralFX es independiente.
