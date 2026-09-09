@@ -2,14 +2,17 @@
 
 Esta entrega implementa la base de seguridad, captura experimental y control del superplan. **No cierra el superplan completo ni certifica DLSS 5 en una ciudad.** Separación pre-UI, confirmación NR por frame, SR interno y comparación NR del mismo frame aún necesitan implementación e integración. No basta con pasar las pruebas de esta entrega para anunciarlas.
 
+Validación del código: [76 pruebas Hub/IPC, compilación del mod con dobles, sanitizadores y WARP aprobados](CI-2026-09-09.md).
+
 ## Qué cambia
 
 - ABI 3 de 64 bytes, resultados de 80 bytes y bridge build 4. El decodificador real acepta layouts antiguos exactos sin leer 48 bytes de un cliente de 32. Rechaza números no finitos, pares cruzados, flags desconocidos, replay y epochs anteriores. Los punteros libres de V2 se descartan; no se desreferencian.
-- Negociación explícita de exports/capacidades. Un mod nuevo rechaza un bridge antiguo. Actualiza mod, Hub y addon juntos; una DLL copiada sobre el disco no actualiza la cargada.
+- Negociación explícita de exports/capacidades y comprobación de DirectX 11 antes de registrar punteros de texturas. Un mod nuevo rechaza un bridge antiguo. Actualiza mod, Hub y addon juntos; una DLL copiada sobre el disco no actualiza la cargada.
 - Jitter desarmado y rechazado por el consumidor. No cambia proyección, nonJitteredProjectionMatrix ni calidad global cuando no hay ruta preparada. `ProjectionLease` restaura matrices personalizadas y respeta escrituras posteriores, para la futura ruta temporal.
 - Configuración schema 3: migra preferencias antiguas sin activar experimentos; conserva preferencias importadas y muestra errores de guardado. No intenta adivinar un LOD vanilla. Un archivo de schema posterior se protege de escritura.
 - Captura MV experimental: tres RenderTextures RGHalf propios, punteros adquiridos al crear recursos, copia GPU mediante command buffer al final de la cámara, identificadores registrados, cámara/epoch y tokens únicos. El addon retiene COM references y espera queries antes de reutilizar. Si se agotan los slots, usa el descriptor óptico completo. Recursos rechazados/no consumidos se retiran al finalizar efectos en su dispositivo.
 - `NeuralFxSelectedMotion` reúne textura, SRV, escala y proveedor. Tanto copia 100% como muestreo reducido usan la selección. La escala de Unity nunca se aplica a un recurso óptico rechazado. Esta corrección no demuestra todavía signo ni cobertura de los shaders de CS1.
+- Se rechazan fallos de Signal/Wait antes de grabar trabajo neural; el último error del backend permanece visible hasta una evaluación correcta, también al cambiar la generación de cámara.
 - Resultado NGX grabado/enviado separado del final de una query D3D11 posterior al blit. Solo esa finalización confirma el reset. No hay señal NR por frame en el consumidor actual; `NrConfirmed` permanece apagado. Una query tras el blit tampoco certifica que ninguna etapa posterior sobrescriba el target.
 - Off detiene el feeder propio y CAS. El addon requiere heartbeat del mod y metadata consumible; no se alimenta en el menú ni en presents auxiliares sin un nuevo token. Lumenite permanece disponible porque puede tener otros consumidores.
 - Controles de sesión: trabajo NR 100/85/66 y nitidez apagada/0,15/0,30 desde Hub o juego. Son comandos escalares al hilo de render, sin tocar DLL ni reinstalar. Se informa pendiente/aplicado/rechazado. Si CAS está compilado sin uniform editable (p. ej. Performance Mode), puede rechazar la nitidez; debe reactivarse la edición del shader en ReShade. No se cambia la política global de compilación ajena.
@@ -50,7 +53,7 @@ El header ReShade incluido en ese upstream expone `render_effects` para adelanta
 
 ## Compilar en tu PC
 
-En PowerShell desde el repositorio actualizado, con Visual Studio C++ x64, Windows SDK y .NET SDK:
+En PowerShell desde el repositorio actualizado, con Git, Visual Studio C++ x64, Windows SDK y .NET SDK 8. Para registrar el commit de la compilación, usa una copia clonada con Git:
 
 ```powershell
 ./tools/Build-NeuralFX.ps1 -ManagedDLLPath 'C:\Program Files (x86)\Steam\steamapps\common\Cities_Skylines\Cities_Data\Managed' -Package
@@ -84,3 +87,5 @@ El script recoge hashes y colas de logs conocidos; no copia partidas ni capturas
 - Todo el código administrado del mod se compila con dobles Unity/Colossal/ICities en C# 7.3; se ejercitan layouts, migración, mil frames sin consumidor, restauración personalizada de matrices/flags y conflicto de escritura, epochs, permiso de jitter, construcción del panel/opciones y foco. No certifica APIs del ensamblado propietario de CS1.
 - El fixture WARP ejerce el descriptor D3D11 real con patrones distintos, copia y muestreo de SRV a 100/85/66 y extents impares. **No ejecuta NGX, la función completa de resample del feeder ni el juego.** La sonda final entregada a NGX sigue pendiente.
 - CI compila el addon completo contra upstream/SDK fijados y el Hub WPF. No ejecuta NVIDIA NR, no navega WPF ni renderiza el mod en el juego.
+
+La comprobación de API usa el contrato documentado de [SystemInfo.graphicsDeviceType en Unity 5.6](https://docs.unity3d.com/560/Documentation/ScriptReference/SystemInfo-graphicsDeviceType.html).
