@@ -13,6 +13,8 @@ if ($actual -ne $commit) { throw 'Unexpected upstream commit; inspect before upd
 # Read the pinned original from git; do not accumulate patches across builds.
 $source = (& git -C $upstreamRoot show HEAD:src/dlss5-feed.cpp) -join "`n"
 function Replace-Once([string]$Text, [string]$Before, [string]$After) {
+    # Git checkout may use CRLF while git-show above is joined with LF.
+    $Text = $Text.Replace("`r`n", "`n"); $Before = $Before.Replace("`r`n", "`n"); $After = $After.Replace("`r`n", "`n")
     if (($Text.Split(@($Before), [StringSplitOptions]::None).Count - 1) -ne 1) { throw "Native patch marker missing or ambiguous: $Before" }
     return $Text.Replace($Before, $After)
 }
