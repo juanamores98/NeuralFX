@@ -1,0 +1,22 @@
+{
+  "sourceCommit": "a063036271f2b84d0abeca31153400940190dbf6",
+  "buildId": null,
+  "installedHash": null,
+  "loadedModuleHash": null,
+  "evidenceRunId": null,
+  "driver": null,
+  "adapterLuid": null,
+  "game": "Cities: Skylines 1 (not present in this environment)",
+  "api": "D3D11 intended; not observed",
+  "sourceHashes": {
+    "Native/neuralfx_bridge.h": "d2ffe6ac972c855e2ce7d18a8aadc5dfc85c88ac94263ca2173343b5253ac864",
+    "Native/build.ps1": "c46919cfe116ba5ab70b051e835b8fd5fe24045ee698683285722899ae639043",
+    "NeuralFX.Mod/Source/Rendering/TemporalCamera.cs": "efb7cd0568406413418ef8b3dacd51c23be9bca9886fa8468d2a8508798c4b51",
+    "NeuralFX.Hub/Assets/components.json": "19732bc88af9bff3a88c7ed6a07c5a8f953fb56453612f7e391eef4be0d685f0"
+  },
+  "historicalEvidence": "docs/VALIDACION.md; not re-executed",
+  "auditAbi": {
+    "v1": 32,
+    "v2": 48
+  }
+}

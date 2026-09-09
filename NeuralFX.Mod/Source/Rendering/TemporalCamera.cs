@@ -1,151 +1,59 @@
-using System;
 using UnityEngine;
 using UnityEngine.Rendering;
 using NeuralFX.Config;
-
 namespace NeuralFX.Rendering
 {
     internal sealed class TemporalCamera : MonoBehaviour
     {
         public NativeBridge Bridge;
         public int ResetSerial { get; set; }
-
-        private static readonly Vector2[] Halton16 = new Vector2[16]
-        {
-            new Vector2(0.000000f, -0.166667f),
-            new Vector2(-0.250000f, 0.166667f),
-            new Vector2(0.250000f, -0.388889f),
-            new Vector2(-0.375000f, -0.055556f),
-            new Vector2(0.125000f, 0.277778f),
-            new Vector2(-0.125000f, -0.277778f),
-            new Vector2(0.375000f, 0.055556f),
-            new Vector2(-0.437500f, 0.388889f),
-            new Vector2(0.062500f, -0.462963f),
-            new Vector2(-0.187500f, -0.129630f),
-            new Vector2(0.312500f, 0.203704f),
-            new Vector2(-0.312500f, -0.351852f),
-            new Vector2(0.187500f, -0.018519f),
-            new Vector2(-0.062500f, 0.314815f),
-            new Vector2(0.437500f, -0.240741f),
-            new Vector2(-0.468750f, 0.092593f)
-        };
-
         private Camera _camera;
         private CommandBuffer _event;
-        private Vector3 _previousPosition;
-        private Quaternion _previousRotation;
-        private float _previousFov, _previousScale;
-        private int _width, _height;
-        private bool _hasPrevious;
-        private Matrix4x4 _originalProjection;
-        private bool _jitterApplied;
-
+        private readonly FrameCoordinator _frames = new FrameCoordinator();
+        private readonly ProjectionLease _projection = new ProjectionLease();
+        private readonly EngineInputProvider _inputs = new EngineInputProvider();
+        private Vector3 _position; private Quaternion _rotation;
+        private float _fov, _scale; private int _width, _height; private bool _previous;
+        public uint Epoch { get { return _frames.Epoch; } }
         public void Awake() { _camera = GetComponent<Camera>(); }
         public void RequestReset() { unchecked { ResetSerial++; } }
-
         public void OnPreCull()
         {
-            if (_camera == null) return;
-            if (ModSettings.ForceMotionVectorsOnLoad)
-            {
-                const DepthTextureMode desired = DepthTextureMode.Depth | DepthTextureMode.MotionVectors;
-                if ((_camera.depthTextureMode & desired) != desired) _camera.depthTextureMode |= desired;
-            }
-
-            Vector3 position = _camera.transform.position;
-            Quaternion rotation = _camera.transform.rotation;
-            bool cut = !_hasPrevious || Vector3.Distance(position, _previousPosition) > Mathf.Max(40f, Mathf.Abs(position.y) * 0.8f) ||
-                Quaternion.Angle(rotation, _previousRotation) > 35f || Mathf.Abs(_camera.fieldOfView - _previousFov) > 10f ||
-                Time.timeScale != _previousScale || _camera.pixelWidth != _width || _camera.pixelHeight != _height;
+            if (_event != null) _event.Clear();
+            _projection.Restore();
+            if (_camera == null || Bridge == null || !Bridge.Connected || !ModSettings.PipelineEnabled) return;
+            int width = _camera.pixelWidth, height = _camera.pixelHeight;
+            if (width <= 0 || height <= 0 || width > Bridge.Capabilities.MaxDimension || height > Bridge.Capabilities.MaxDimension) return;
+            bool resize = width != _width || height != _height;
+            bool cut = !_previous || resize || Vector3.Distance(_camera.transform.position, _position) > Mathf.Max(40f, Mathf.Abs(_camera.transform.position.y) * .8f) ||
+                Quaternion.Angle(_camera.transform.rotation, _rotation) > 35f || Mathf.Abs(_camera.fieldOfView - _fov) > 10f || _scale != Time.timeScale;
             if (cut) RequestReset();
-
-            _previousPosition = position; _previousRotation = rotation; _previousFov = _camera.fieldOfView; _previousScale = Time.timeScale;
-            _width = _camera.pixelWidth; _height = _camera.pixelHeight; _hasPrevious = true;
-
-            // Conservar la matriz de proyección original limpia para vectores de movimiento y UI
-            _originalProjection = _camera.projectionMatrix;
-            _camera.nonJitteredProjectionMatrix = _originalProjection;
-
-            // Optimización de nitidez de texturas y LOD geométrico si está habilitado
-            if (ModSettings.EnhanceTextureClarity)
+            if (resize) _frames.Recreate();
+            _position = _camera.transform.position; _rotation = _camera.transform.rotation; _fov = _camera.fieldOfView; _scale = Time.timeScale;
+            _width = width; _height = height; _previous = true;
+            if (_event == null) { _event = new CommandBuffer { name = "NeuralFX current-camera capture and token" }; _camera.AddCommandBuffer(CameraEvent.AfterEverything, _event); }
+            uint cameraId = unchecked((uint)_camera.GetInstanceID());
+            uint motion = 0;
+            if (ModSettings.ExperimentalOptIn && ModSettings.EnableNativeMotionVectors && (Bridge.Capabilities.Supported & 16) != 0)
             {
-                if (QualitySettings.anisotropicFiltering != AnisotropicFiltering.ForceEnable)
-                    QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
-                if (QualitySettings.lodBias < 2.0f)
-                    QualitySettings.lodBias = 2.0f;
+                _camera.depthTextureMode |= DepthTextureMode.Depth | DepthTextureMode.MotionVectors;
+                if (_inputs.Prepare(Bridge, cameraId, _frames.Epoch, width, height)) motion = _inputs.Record(_event);
             }
-
-            float jx = 0f, jy = 0f;
-            if (!cut && ModSettings.EnableCameraJitter && _width > 0 && _height > 0)
-            {
-                int phaseIndex = Time.frameCount & 15;
-                Vector2 phase = Halton16[phaseIndex];
-                jx = phase.x;
-                jy = phase.y;
-
-                // Modificar el sesgo de la matriz de proyección en espacio NDC (-1 a 1)
-                Matrix4x4 jittered = _originalProjection;
-                jittered.m02 += 2.0f * jx / _width;
-                jittered.m12 += 2.0f * jy / _height;
-                _camera.projectionMatrix = jittered;
-                _jitterApplied = true;
-            }
-
-            // Obtener puntero nativo D3D11 a los vectores de movimiento de Unity si están disponibles
-            ulong mvPtr = 0;
-            if (ModSettings.EnableNativeMotionVectors)
-            {
-                try
-                {
-                    Texture mvTex = Shader.GetGlobalTexture("_CameraMotionVectorsTexture");
-                    if (mvTex != null)
-                    {
-                        IntPtr p = mvTex.GetNativeTexturePtr();
-                        mvPtr = (ulong)p.ToInt64();
-                    }
-                }
-                catch { }
-            }
-
-            if (Bridge == null || !Bridge.Connected) return;
-            if (_event == null) { _event = new CommandBuffer { name = "NeuralFX frame metadata" }; _camera.AddCommandBuffer(CameraEvent.AfterEverything, _event); }
-            _event.Clear();
-            var frame = new NativeFrame
-            {
-                Size = 48,
-                Version = 2,
-                Frame = Time.frameCount + 1,
-                ResetSerial = ResetSerial,
-                Width = _width,
-                Height = _height,
-                JitterX = jx,
-                JitterY = jy,
-                MotionVectorsPtr = mvPtr,
-                MvScaleX = _width,
-                MvScaleY = _height
+            var frame = new NativeFrame {
+                Size = 64, Version = 3, Magic = 0x4e465833, Frame = _frames.NextFrame(), ResetSerial = unchecked((uint)ResetSerial),
+                Camera = cameraId, Epoch = _frames.Epoch, Width = (uint)width, Height = (uint)height,
+                MotionHandle = motion, MvScaleX = motion != 0 ? width : 1, MvScaleY = motion != 0 ? height : 1
             };
-            if (Bridge.Submit(ref frame)) _event.IssuePluginEvent(Bridge.RenderEvent, frame.Frame);
+            // Jitter intentionally stays zero: feeder has no prepared-frame/fallback contract.
+            if (Bridge.Submit(ref frame)) _event.IssuePluginEvent(Bridge.RenderEvent, unchecked((int)frame.Frame));
+            else { _event.Clear(); _inputs.Release(); }
         }
-
-        public void OnPostRender()
-        {
-            if (_jitterApplied && _camera != null)
-            {
-                _camera.ResetProjectionMatrix();
-                _camera.projectionMatrix = _originalProjection;
-                _jitterApplied = false;
-            }
-        }
-
+        public void OnPostRender() { _projection.Restore(); }
         public void OnDisable()
         {
-            if (_jitterApplied && _camera != null)
-            {
-                _camera.ResetProjectionMatrix();
-                _jitterApplied = false;
-            }
+            _projection.Restore();
             if (_event != null) { if (_camera != null) _camera.RemoveCommandBuffer(CameraEvent.AfterEverything, _event); _event.Release(); _event = null; }
-            _hasPrevious = false;
+            _inputs.Release(); _previous = false;
         }
     }
 }

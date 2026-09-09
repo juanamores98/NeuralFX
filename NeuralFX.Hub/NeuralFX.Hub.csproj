@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NeuralFX.Mod\NeuralFX.Mod.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\NeuralFX.Mod\NeuralFX.Mod.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Condition="'$(BuildMod)' != 'false'" />
   </ItemGroup>
 
   <Target Name="RequireNativeBridgeForPublish" BeforeTargets="Publish">

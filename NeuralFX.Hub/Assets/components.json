@@ -18,7 +18,7 @@
   },
   {
     "Id": "dlss5_feeder",
-    "DisplayName": "DLSS5-Feeder Â· efecto companion",
+    "DisplayName": "DLSS5-Feeder · efecto companion",
     "Description": "Efecto compatible con el puente NeuralFX basado en beta.4.",
     "Category": 1,
     "TargetRelativePath": "reshade-shaders/Shaders/DLSS5_Feed.fx",
@@ -40,7 +40,7 @@
   {
     "Id": "renodx_dlss5",
     "DisplayName": "RenoDX DLSS5 3.3.4",
-    "Description": "VersiÃ³n fijada tras probar NR a 4K. Las versiones 4.55/4.70 fallaron en la validaciÃ³n.",
+    "Description": "Versión fijada tras probar NR a 4K. Las versiones 4.55/4.70 fallaron en la validación.",
     "Category": 1,
     "TargetRelativePath": "renodx-dlss5.addon64",
     "SourceType": "PublicDownload",
@@ -62,7 +62,7 @@
   {
     "Id": "lumenite",
     "DisplayName": "LumeniteFX Kernel",
-    "Description": "Proveedor de movimiento estimado; descarga del autor, sin redistribuir su cÃ³digo.",
+    "Description": "Proveedor de movimiento estimado; descarga del autor, sin redistribuir su código.",
     "Category": 3,
     "TargetRelativePath": "reshade-shaders/Shaders/lumenite_Kernel.fx",
     "SourceType": "PublicDownload",
@@ -94,7 +94,7 @@
   {
     "Id": "reshade_header",
     "DisplayName": "Cabecera oficial ReShade.fxh",
-    "Description": "TamaÃ±os del framebuffer y acceso a profundidad de ReShade.",
+    "Description": "Tamaños del framebuffer y acceso a profundidad de ReShade.",
     "Category": 3,
     "TargetRelativePath": "reshade-shaders/Shaders/ReShade.fxh",
     "SourceType": "PublicDownload",
@@ -126,7 +126,7 @@
   {
     "Id": "reshade_drawtext_header",
     "DisplayName": "Cabecera oficial DrawText.fxh",
-    "Description": "Renderizado de texto y estadÃ­sticas en pantalla para ReShade.",
+    "Description": "Renderizado de texto y estadísticas en pantalla para ReShade.",
     "Category": 3,
     "TargetRelativePath": "reshade-shaders/Shaders/DrawText.fxh",
     "SourceType": "PublicDownload",
@@ -142,11 +142,11 @@
   {
     "Id": "nvngx_dlss",
     "DisplayName": "NVIDIA DLSS Super Resolution 310.9.1",
-    "Description": "Runtime nvngx_dlss.dll oficial firmado por NVIDIA.",
+    "Description": "Importar runtime original del tuple fijado; SHA-256 de archivo y Authenticode NVIDIA válidos obligatorios. NR no se confirma por instalación.",
     "Category": 2,
     "TargetRelativePath": "nvngx_dlss.dll",
-    "SourceType": "PublicDownload",
-    "CanAutoDownload": true,
+    "SourceType": "UserProvided",
+    "CanAutoDownload": false,
     "DownloadUrl": "https://github.com/RankFTW/rhi-repo/releases/download/dlss-310.9.1/nvngx_dlss_310.9.1.zip",
     "OfficialWebUrl": "https://github.com/RankFTW/rhi-repo/releases",
     "DownloadType": "ZipExtract",
@@ -157,16 +157,20 @@
     },
     "ExpectedFileSha256": {
       "nvngx_dlss.dll": "3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983"
-    }
+    },
+    "Author": "NVIDIA",
+    "Distributor": "User import (community mirror listed for historical provenance only)",
+    "LicenseStatus": "User must obtain an authorized runtime; redistribution not established here",
+    "TrustPolicy": "PinnedFileHashAndNvidiaAuthenticode"
   },
   {
     "Id": "nvngx_dlssnr",
     "DisplayName": "NVIDIA DLSS Neural Rendering",
-    "Description": "Runtime nvngx_dlssnr.dll (auto-descarga adaptada segÃºn arquitectura GPU).",
+    "Description": "Importar runtime original del tuple fijado; SHA-256 de archivo y Authenticode NVIDIA válidos obligatorios. NR no se confirma por instalación.",
     "Category": 2,
     "TargetRelativePath": "nvngx_dlssnr.dll",
-    "SourceType": "PublicDownload",
-    "CanAutoDownload": true,
+    "SourceType": "UserProvided",
+    "CanAutoDownload": false,
     "DownloadUrl": "https://github.com/RankFTW/rhi-repo/releases/download/dlssnr-310.8.0/nvngx_dlssnr_310.8.0.zip",
     "OfficialWebUrl": "https://github.com/RankFTW/rhi-repo/releases",
     "DownloadType": "ZipExtract",
@@ -177,12 +181,16 @@
     },
     "ExpectedFileSha256": {
       "nvngx_dlssnr.dll": "e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e"
-    }
+    },
+    "Author": "NVIDIA",
+    "Distributor": "User import (community mirror listed for historical provenance only)",
+    "LicenseStatus": "User must obtain an authorized runtime; redistribution not established here",
+    "TrustPolicy": "PinnedFileHashAndNvidiaAuthenticode"
   },
   {
     "Id": "reshade_preset",
-    "DisplayName": "ConfiguraciÃ³n NeuralFX y CAS",
-    "Description": "Opciones soportadas por el feeder seleccionado; CAS conserva resoluciÃ³n nativa.",
+    "DisplayName": "Configuración NeuralFX y CAS",
+    "Description": "Opciones soportadas por el feeder seleccionado; CAS conserva resolución nativa.",
     "Category": 4,
     "TargetRelativePath": "ReShadePreset.ini",
     "SourceType": "Embedded",
@@ -195,13 +203,13 @@
   },
   {
     "Id": "neuralfx_bridge",
-    "DisplayName": "Puente NeuralFX Â· feeder beta.4",
-    "Description": "ExtensiÃ³n compilada con reset sincronizado en el hilo de render y confirmaciÃ³n NGX.",
+    "DisplayName": "Puente NeuralFX · feeder beta.4",
+    "Description": "ABI 3: reset, control de sesión, entradas registradas y confirmación GPU del portador. NR permanece sin confirmar.",
     "Category": 1,
     "TargetRelativePath": "dlss5-feed.addon64",
     "SourceType": "Bundled",
     "CanAutoDownload": false,
-    "Version": "0.14.0-beta.4-neuralfx.3",
+    "Version": "0.14.0-beta.4-neuralfx.4",
     "OfficialWebUrl": "https://github.com/juanamores98/NeuralFX"
   }
 ]

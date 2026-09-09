@@ -1,34 +1,42 @@
 #include "neuralfx_bridge.h"
 #include <cassert>
 #include <cstdio>
-
+#include <limits>
+#include <memory>
+#include <initializer_list>
 int main() {
-    NeuralFxStatus status = {sizeof(NeuralFxStatus)};
-    assert(NeuralFX_GetStatus(&status) == 1 && status.result == 0 && status.age_ms == UINT32_MAX);
-    NeuralFxFrame frame = {sizeof(NeuralFxFrame), 2, 1, 7, 1920, 1080, 0, 0, 0x12345678ULL, 1920.0f, 1080.0f};
-    NeuralFxFrame captured = {};
-    assert(NeuralFX_SubmitFrame(&frame) == 1);
-    assert(!NeuralFxTakeFrame(1920, 1080, captured)); // CPU submit alone cannot associate a render frame.
-    NeuralFxRenderEvent(1);
-    assert(!NeuralFxTakeFrame(1280, 720, captured));
-    assert(NeuralFxTakeFrame(1920, 1080, captured));
-    assert(captured.motion_vectors_ptr == 0x12345678ULL && captured.mv_scale_x == 1920.0f);
-    assert(!NeuralFxTakeFrame(1920, 1080, captured));
-    assert(NeuralFxResetNeeded(frame));
-    NeuralFxEvaluated(frame, false, 1920, 1080);
-    assert(NeuralFxResetNeeded(frame)); // Failed evaluations cannot acknowledge a reset.
-    NeuralFxEvaluated(frame, true, 1920, 1080);
-    assert(!NeuralFxResetNeeded(frame));
-    NeuralFX_GetStatus(&status);
-    assert(status.capabilities == 7);
-    frame.frame = 2; frame.reset_serial = 8; frame.jitter_x = 0.25f; frame.jitter_y = -0.125f;
-    assert(NeuralFX_SubmitFrame(&frame) == 1); // Accept validated sub-pixel jitter contracts.
-    NeuralFxRenderEvent(2);
-    assert(NeuralFxTakeFrame(1920, 1080, captured));
-    assert(captured.jitter_x == 0.25f && captured.jitter_y == -0.125f);
-    frame.jitter_x = 5.0f; assert(NeuralFX_SubmitFrame(&frame) == 0); // Reject out-of-range jitter.
-    frame.jitter_x = 0; frame.jitter_y = 0; assert(NeuralFX_SubmitFrame(&frame) == 1);
-    NeuralFxRenderEvent(2); nfx_render_tick = GetTickCount64() - 2001;
-    assert(!NeuralFxTakeFrame(1920, 1080, captured));
-    std::puts("Native bridge tests passed (ABI, render event, dimensions, reset acknowledgement, freshness, jitter and native MV support).");
+    NeuralFxCapabilities caps = {}; assert(NeuralFX_GetCapabilities(&caps, sizeof(caps)) == 1);
+    assert(caps.frame_bytes == 64 && !(caps.supported & 2));
+    NeuralFxFrameV3 decoded = {}, f = {64, 3, 1, 7, 1920, 1080, 0, 0, 42, 1, 0, 0, 1, 1, NFX_MAGIC, 0};
+    assert(!NeuralFxDecode(nullptr, 0, decoded));
+    for (uint32_t size = 0; size < 64; ++size) assert(!NeuralFxDecode(&f, size, decoded));
+    auto legacy = std::make_unique<NeuralFxFrameV1>(NeuralFxFrameV1{32, 1, 1, 7, 1920, 1080, 0, 0});
+    assert(NeuralFxDecode(legacy.get(), 32, decoded)); // exact heap allocation, ASan covers the real decoder
+    NeuralFX_SetEnabled(1);
+    assert(NeuralFX_SubmitFrame(reinterpret_cast<NeuralFxFrame*>(legacy.get())) == 1);
+    NeuralFxFrame v2 = {48,2,2,7,1920,1080,0,0,0x12345678,1920,1080};
+    assert(NeuralFxDecode(&v2,48,decoded) && !decoded.motion_handle && decoded.mv_scale_x == 1);
+    v2.version=1; assert(!NeuralFxDecode(&v2,48,decoded)); v2.version=2;
+    legacy->version=2; assert(!NeuralFxDecode(legacy.get(),32,decoded));
+    for (float invalid : {std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity()}) {
+        f.jitter_x=invalid; assert(!NeuralFxDecode(&f,64,decoded)); f.jitter_x=0;
+        f.mv_scale_y=invalid; assert(!NeuralFxDecode(&f,64,decoded)); f.mv_scale_y=1;
+    }
+    f.flags=1; assert(!NeuralFxDecode(&f,64,decoded)); f.flags=0;
+    f.width=UINT32_MAX; assert(!NeuralFxDecode(&f,64,decoded)); f.width=1920;
+    assert(NeuralFX_SubmitFrameV3(&f,64)==1);
+    assert(!NeuralFxTakeFrame(1920,1080,decoded));
+    NeuralFxRenderEvent(1); assert(!NeuralFxTakeFrame(1280,720,decoded));
+    assert(NeuralFxTakeFrame(1920,1080,decoded)); assert(!NeuralFxTakeFrame(1920,1080,decoded));
+    assert(!NeuralFX_SubmitFrameV3(&f,64)); // replay
+    assert(NeuralFxResetNeeded(f));
+    NeuralFxRecorded(f,0,true,1920,1080,1); assert(NeuralFxResetNeeded(f)); // submission is not completion
+    NeuralFxCompleted(f); assert(!NeuralFxResetNeeded(f));
+    f.frame=2; f.epoch=2; f.reset_serial=8; assert(NeuralFX_SubmitFrameV3(&f,64));
+    NeuralFxFrameV3 old=f; old.epoch=1; old.frame=3; assert(!NeuralFX_SubmitFrameV3(&old,64));
+    NeuralFxCompleted(old); assert(NeuralFxResetNeeded(f));
+    f.frame=3; f.jitter_x=.25f; assert(!NeuralFX_SubmitFrameV3(&f,64)); f.jitter_x=0;
+    NeuralFX_SetEnabled(0); assert(!NeuralFX_SubmitFrameV3(&f,64));
+    assert(NeuralFxNewer(1,UINT32_MAX) && !NeuralFxNewer(UINT32_MAX,1));
+    std::puts("Bridge contract passed: exact V1 allocation, V2/V3, malformed buffers, finite values, replay, epochs, completion, safe jitter and Off.");
 }

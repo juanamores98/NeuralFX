@@ -1,7 +1,7 @@
 <Window x:Class="NeuralFX.Hub.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="NeuralFX Hub · Cities: Skylines 1" Width="1100" Height="820" MinWidth="950" MinHeight="760"
+        Title="NeuralFX Hub · Cities: Skylines 1" Width="1000" Height="700" MinWidth="620" MinHeight="400"
         Background="{StaticResource BgDark}" WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
@@ -154,8 +154,39 @@
         <TabControl x:Name="MainTabs" SelectedIndex="0" Grid.Row="2" Background="#2D2D30" BorderBrush="{StaticResource CardBorder}" Padding="14">
 
             <!-- PESTAÑA 1: PIPELINE E INSTALACIÓN -->
-            <TabItem Header="Instalación y Pipeline">
-                <Grid x:Name="PipelineActions">
+            <TabItem Header="Inicio">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="Estado de la ciudad" FontSize="16" FontWeight="Bold" Margin="0,0,0,12" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock x:Name="TxtSessionSummary" Text="Sin sesión activa" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Success}" />
+                                <TextBlock x:Name="TxtSessionHint" Text="Abre Cities: Skylines para recibir métricas." Foreground="{StaticResource TextDim}" FontSize="12" Margin="0,3,0,10" />
+                                <TextBlock x:Name="TxtTelemetry" Text="Esperando conexión MMF del mod in-game..." FontSize="13" LineHeight="22" TextWrapping="Wrap" FontFamily="Consolas" Foreground="#E0E0E0" />
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="Controles In-Game Rápidos" FontWeight="SemiBold" FontSize="14" Margin="0,6,0,8" />
+                        <WrapPanel x:Name="TelemetryCommands" IsEnabled="False" Margin="0,0,0,16">
+                            <Button Content="Abrir/Cerrar Panel In-Game (Ctrl+Alt+N)" Tag="TogglePanel" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" />
+                            <Button Content="Activar NeuralFX" Tag="EnablePipeline" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" /><Button Content="Desactivar NeuralFX" Tag="DisablePipeline" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" /><Button Content="Reaplicar buffers experimentales" Tag="ReapplyBuffers" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" />
+                            <Button Content="Reset de Historial Temporal" Tag="ResetHistory" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" />
+                        </WrapPanel>
+
+                        <TextBlock Text="Integridad de Archivos" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,6" />
+                        <Border Style="{StaticResource Card}">
+                            <TextBlock x:Name="TxtIntegrity" Text="Comprobando archivos..." TextWrapping="Wrap" FontSize="12" LineHeight="18" Foreground="{StaticResource TextDim}" />
+                        </Border>
+
+                        <DockPanel Margin="0,6,0,0">
+                            <Button Content="Buscar Actualizaciones" Click="BtnCheckUpdates_Click" DockPanel.Dock="Left" Margin="0,0,12,0" Padding="10,6" />
+                            <TextBlock x:Name="TxtUpdates" Text="Sin consultar." VerticalAlignment="Center" Foreground="{StaticResource TextDim}" FontSize="12" />
+                        </DockPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+<TabItem Header="Instalación">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"><Grid x:Name="PipelineActions" MinWidth="570">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -166,10 +197,10 @@
                     <!-- Tarjeta Principal de Control (One-Click Action) -->
                     <Border Grid.Row="0" Background="#26262B" BorderBrush="#4A4A52" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,0,12">
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
                             <StackPanel VerticalAlignment="Center" Margin="0,0,20,0">
                                 <TextBlock x:Name="TxtPipelineStatusTitle" Text="Estado del Pipeline en Cities: Skylines" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextLight}" />
@@ -177,19 +208,19 @@
                             </StackPanel>
 
                             <!-- Acciones Principales y Preset -->
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <WrapPanel Grid.Row="1" Margin="0,12,0,0">
                                 <StackPanel Margin="0,0,14,0">
-                                    <TextBlock Text="Perfil de Escalado" FontSize="11" Foreground="{StaticResource TextDim}" Margin="0,0,0,3" />
-                                    <ComboBox x:Name="PresetSelector" SelectedIndex="0" Padding="8,6" MinWidth="180">
-                                        <ComboBoxItem Content="Nativo · Calidad 100%" />
-                                        <ComboBoxItem Content="Equilibrado · Calidad 85%" />
-                                        <ComboBoxItem Content="Rendimiento · Calidad 66%" />
-                                        <ComboBoxItem Content="Fotografía · Nitidez Fina" />
+                                    <TextBlock Text="Resolución de trabajo NR" FontSize="11" Foreground="{StaticResource TextDim}" Margin="0,0,0,3" />
+                                    <ComboBox x:Name="PresetSelector" AutomationProperties.Name="Resolución de trabajo NR" SelectedIndex="0" Padding="8,6" MinWidth="180">
+                                        <ComboBoxItem Content="Trabajo NR 100%" />
+                                        <ComboBoxItem Content="Trabajo NR 85%" />
+                                        <ComboBoxItem Content="Trabajo NR 66%" />
+                                        <ComboBoxItem Content="Trabajo NR 100% · nitidez 0,15" />
                                     </ComboBox>
                                 </StackPanel>
                                 <Button x:Name="BtnInstall" Content="Instalar en el Juego" Click="BtnInstall_Click" Background="#27AE60" Padding="18,10" Margin="0,0,8,0" FontWeight="Bold" FontSize="13" VerticalAlignment="Bottom" />
-                                <Button x:Name="BtnUninstall" Content="Desinstalar (Limpieza 100%)" Click="BtnUninstall_Click" Background="#C0392B" Padding="14,10" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Bottom" IsEnabled="False" />
-                            </StackPanel>
+                                <Button x:Name="BtnUninstall" Content="Restaurar / desinstalar" Click="BtnUninstall_Click" Background="#C0392B" Padding="14,10" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Bottom" IsEnabled="False" />
+                            </WrapPanel>
                         </Grid>
                     </Border>
 
@@ -279,10 +310,8 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </Grid>
-            </TabItem>
-
-            <!-- PESTAÑA 2: ENTORNO Y HARDWARE -->
-            <TabItem Header="Entorno y Diagnóstico">
+            </ScrollViewer></TabItem>
+<TabItem Header="Diagnóstico"><Grid><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Text="Hardware y Compatibilidad" FontSize="16" FontWeight="Bold" Margin="0,0,0,14" />
@@ -362,43 +391,7 @@
                         <Button x:Name="BtnRefreshDiagnostics" Content="🔄 Volver a Analizar Entorno" Click="BtnRefreshDiagnostics_Click" HorizontalAlignment="Left" Margin="0,4,0,12" />
                     </StackPanel>
                 </ScrollViewer>
-            </TabItem>
-
-            <!-- PESTAÑA 3: ESTADO EN JUEGO (TELEMETRÍA) -->
-            <TabItem Header="En Juego (Telemetría)">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <TextBlock Text="Monitor de Sesión en Tiempo Real" FontSize="16" FontWeight="Bold" Margin="0,0,0,12" />
-                        <Border Style="{StaticResource Card}">
-                            <StackPanel>
-                                <TextBlock x:Name="TxtSessionSummary" Text="Sin sesión activa" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Success}" />
-                                <TextBlock x:Name="TxtSessionHint" Text="Abre Cities: Skylines para recibir métricas." Foreground="{StaticResource TextDim}" FontSize="12" Margin="0,3,0,10" />
-                                <TextBlock x:Name="TxtTelemetry" Text="Esperando conexión MMF del mod in-game..." FontSize="13" LineHeight="22" TextWrapping="Wrap" FontFamily="Consolas" Foreground="#E0E0E0" />
-                            </StackPanel>
-                        </Border>
-
-                        <TextBlock Text="Controles In-Game Rápidos" FontWeight="SemiBold" FontSize="14" Margin="0,6,0,8" />
-                        <WrapPanel x:Name="TelemetryCommands" IsEnabled="False" Margin="0,0,0,16">
-                            <Button Content="Abrir/Cerrar Panel In-Game (Ctrl+Alt+N)" Tag="TogglePanel" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" />
-                            <Button Content="Reaplicar Buffers de Cámara" Tag="ReapplyBuffers" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" />
-                            <Button Content="Reset de Historial Temporal" Tag="ResetHistory" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" />
-                        </WrapPanel>
-
-                        <TextBlock Text="Integridad de Archivos" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,6" />
-                        <Border Style="{StaticResource Card}">
-                            <TextBlock x:Name="TxtIntegrity" Text="Comprobando archivos..." TextWrapping="Wrap" FontSize="12" LineHeight="18" Foreground="{StaticResource TextDim}" />
-                        </Border>
-
-                        <DockPanel Margin="0,6,0,0">
-                            <Button Content="Buscar Actualizaciones" Click="BtnCheckUpdates_Click" DockPanel.Dock="Left" Margin="0,0,12,0" Padding="10,6" />
-                            <TextBlock x:Name="TxtUpdates" Text="Sin consultar." VerticalAlignment="Center" Foreground="{StaticResource TextDim}" FontSize="12" />
-                        </DockPanel>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- PESTAÑA 4: REGISTRO (LOGS) -->
-            <TabItem Header="Registro (Logs)">
+            <Expander Grid.Row="1" Header="Registros de componentes" Margin="0,8,0,0"><Border Height="260">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -414,7 +407,7 @@
                     </DockPanel>
                     <TextBox Grid.Row="1" x:Name="TxtLogConsole" IsReadOnly="True" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="#141416" Foreground="#D4D4D4" BorderBrush="#333337" Padding="10" />
                 </Grid>
-            </TabItem>
+            </Border></Expander></Grid></TabItem>
         </TabControl>
 
         <!-- Barra Inferior -->

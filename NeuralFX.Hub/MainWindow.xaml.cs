@@ -26,7 +26,7 @@ namespace NeuralFX.Hub
         private readonly IntegrityMonitor _integrity = new();
         private readonly Dictionary<string, IncrementalLogReader> _logReaders = new();
         private readonly StringBuilder _hubLogs = new();
-        private readonly DispatcherTimer _liveTimer = new() { Interval = TimeSpan.FromMilliseconds(1000.0 / 30) };
+        private readonly DispatcherTimer _liveTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
         private readonly DispatcherTimer _backgroundTimer = new() { Interval = TimeSpan.FromSeconds(2) };
         private HardwareInfo _hardwareInfo = new();
         private List<DependencyItem> _dependencies = new();
@@ -76,7 +76,7 @@ namespace NeuralFX.Hub
             {
                 _hardwareInfo = await Task.Run(() => _diagnosticsService.RunDiagnostics(_preferences.GameExecutable));
                 TxtGpuName.Text = _hardwareInfo.GpuName;
-                TxtArchitecture.Text = "La compatibilidad con DLSS Neural Rendering se confirma activando el mod in-game.";
+                TxtArchitecture.Text = "Inventario preliminar del registro. El LUID del dispositivo del juego aparece en Inicio; SR, DLAA y NR requieren consultas independientes.";
                 TxtBadgeGpu.Text = _hardwareInfo.DetectedArchitecture switch
                 {
                     GpuArchitecture.Blackwell => "NVIDIA RTX BLACKWELL",
@@ -194,8 +194,8 @@ namespace NeuralFX.Hub
 
                 TxtGameStatus.Text = "INSTALADO Y ACTIVO";
                 PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(39, 174, 96));
-                TxtPipelineStatusTitle.Text = "Pipeline Neural Activo y Configurado";
-                TxtPipelineStatusSubtitle.Text = "ReShade 6.8, Addons y DLSS Neural Rendering están instalados y verificados en Cities: Skylines. Todo listo para jugar.";
+                TxtPipelineStatusTitle.Text = "Archivos instalados y verificados";
+                TxtPipelineStatusSubtitle.Text = "Instalación verificada. La ejecución del portador y de NR se comprueba por separado al cargar una ciudad.";
                 BtnInstall.Content = "Actualizar / Reinstalar";
                 BtnInstall.Background = new SolidColorBrush(Color.FromRgb(41, 128, 185));
                 BtnInstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && guidance.CanInstall;
@@ -216,8 +216,8 @@ namespace NeuralFX.Hub
             {
                 TxtGameStatus.Text = "NO INSTALADO (VANILLA)";
                 PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(74, 74, 79));
-                TxtPipelineStatusTitle.Text = "Cities: Skylines sin Inyecciones (Vanilla)";
-                TxtPipelineStatusSubtitle.Text = "El directorio del juego está completamente limpio. Pulsa 'Instalar en el Juego' para configurar el pipeline de escalado.";
+                TxtPipelineStatusTitle.Text = "Sin instalación NeuralFX detectada";
+                TxtPipelineStatusSubtitle.Text = "No se detectaron archivos gestionados de NeuralFX. Revisa el plan antes de instalar.";
                 BtnInstall.Content = "Instalar en el Juego";
                 BtnInstall.Background = new SolidColorBrush(Color.FromRgb(39, 174, 96));
                 BtnInstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && guidance.CanInstall;
@@ -260,8 +260,8 @@ namespace NeuralFX.Hub
             _lastFrame = frame;
             TxtTelemetry.Text = TelemetryStatus.Describe(frame);
             bool evaluated = (frame.Flags & RuntimeFlags.EvaluationSucceeded) != 0;
-            TxtSessionSummary.Text = evaluated ? "DLSS Neural Rendering Confirmado" : "Mod Conectado (Sin evaluación NGX)";
-            TxtSessionHint.Text = evaluated ? "Inferencia de red neural activa y entregando fotogramas reconstruidos." : "Esperando primer frame de reconstrucción neural en la cámara.";
+            TxtSessionSummary.Text = SessionViewState.Summary(frame);
+            TxtSessionHint.Text = "NGX, NR y salida incorporada son estados distintos. El tiempo mostrado es el intervalo del juego, no el coste GPU de NR.";
         }
 
         private void BtnTelemetryCommand_Click(object sender, RoutedEventArgs e)
@@ -358,7 +358,9 @@ namespace NeuralFX.Hub
             await PerformAsync("Instalando y verificando archivos del juego", async () =>
             {
                 var preset = (PipelinePreset)PresetSelector.SelectedIndex;
-                bool success = await _installEngine.InstallAsync(root, _dependencies, LogHub, preset: preset);
+                var preview = await Task.Run(() => InstallationPreview.Create(root, _dependencies, _dependencyManager, preset));
+                if (!ReviewInstallation(preview.Description)) return new(null, "Instalación cancelada", "No se aplicaron cambios.");
+                bool success = await _installEngine.InstallAsync(root, _dependencies, LogHub, preset: preset, preview: preview);
                 if (!success) return new(false, "La instalación no se completó", _operationLastMessage);
 
                 // Asegurar que NeuralFX.dll esté desplegado en la carpeta de Mods
@@ -370,10 +372,21 @@ namespace NeuralFX.Hub
                 _integrity.Invalidate();
 
                 string presetName = (PresetSelector.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? preset.ToString();
-                return new(true, "Pipeline instalado y verificado", "Componentes aplicados correctamente con perfil: " + presetName + ".\nInicia Cities: Skylines para disfrutar del escalado neural.");
+                return new(true, "Pipeline instalado y verificado", "Componentes aplicados correctamente con perfil: " + presetName + ".\nReinicia Cities: Skylines y valida el resultado en una ciudad.");
             });
         }
 
+        private bool ReviewInstallation(string description)
+        {
+            var text = new TextBox { Text = description, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(12) };
+            var apply = new Button { Content = "Aplicar este plan", IsDefault = true, Margin = new Thickness(12), Padding = new Thickness(16,8,16,8) };
+            var cancel = new Button { Content = "Cancelar", IsCancel = true, Margin = new Thickness(12) };
+            var actions = new StackPanel { Orientation = Orientation.Horizontal }; actions.Children.Add(apply); actions.Children.Add(cancel);
+            var panel = new DockPanel(); DockPanel.SetDock(actions,Dock.Bottom); panel.Children.Add(actions); panel.Children.Add(text);
+            var window = new Window { Owner=this,Title="Revisar cambios de instalación",Width=Math.Min(760,SystemParameters.WorkArea.Width),Height=Math.Min(620,SystemParameters.WorkArea.Height),Content=panel,WindowStartupLocation=WindowStartupLocation.CenterOwner };
+            apply.Click += (_,_)=>window.DialogResult=true;
+            return window.ShowDialog()==true;
+        }
         private void EnsureModDeployed()
         {
             try

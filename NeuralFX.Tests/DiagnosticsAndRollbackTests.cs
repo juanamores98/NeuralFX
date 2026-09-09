@@ -224,32 +224,16 @@ public sealed class DiagnosticsAndRollbackTests : IDisposable
         Assert.Equal("42", Ini.Get(ini, "GENERAL", "Other"));
     }
     [Fact]
-    public void HardwareConfigurationSelectsMatchingRuntimeVariants()
+    public void HardwareConfigurationNeverSilentlySelectsPatchedRuntimes()
     {
         var items = _dependencies.GetInitialDependencies();
-        
-        // RTX 40 (Ada Lovelace)
-        var ada = new HardwareInfo { DetectedArchitecture = GpuArchitecture.AdaLovelace };
-        _dependencies.ConfigureForHardware(items, ada);
-        var nrAda = items.First(x => x.Id == "nvngx_dlssnr");
-        Assert.Contains("RTX40", nrAda.Version);
-        Assert.Contains("dlssnr-310.8.0-RTX40", nrAda.DownloadUrl!);
-        Assert.Equal(64, nrAda.ExpectedSha256!.Length);
-
-        // RTX 30 / 20 (Ampere / Turing)
-        var ampere = new HardwareInfo { DetectedArchitecture = GpuArchitecture.AmpereTuring };
-        _dependencies.ConfigureForHardware(items, ampere);
-        var nrAmpere = items.First(x => x.Id == "nvngx_dlssnr");
-        Assert.Contains("SF-v2", nrAmpere.Version);
-        Assert.Contains("SF-v2", nrAmpere.DownloadUrl!);
-        Assert.Equal(64, nrAmpere.ExpectedSha256!.Length);
-
-        // RTX 50 (Blackwell)
-        var blackwell = new HardwareInfo { DetectedArchitecture = GpuArchitecture.Blackwell };
-        _dependencies.ConfigureForHardware(items, blackwell);
-        var nrBlackwell = items.First(x => x.Id == "nvngx_dlssnr");
-        Assert.Equal("310.8.0", nrBlackwell.Version);
-        Assert.Equal(64, nrBlackwell.ExpectedSha256!.Length);
+        var nr = items.First(x => x.Id == "nvngx_dlssnr");
+        string version = nr.Version; string? url = nr.DownloadUrl;
+        foreach (var architecture in Enum.GetValues<GpuArchitecture>()) {
+            _dependencies.ConfigureForHardware(items,new HardwareInfo {DetectedArchitecture=architecture});
+            Assert.Equal(version,nr.Version); Assert.Equal(url,nr.DownloadUrl);
+            Assert.False(nr.CanAutoDownload);
+        }
     }
     [Fact]
     public void PipelineFootprintIncludesReShadeGeneratedFiles()

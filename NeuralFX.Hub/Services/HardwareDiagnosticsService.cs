@@ -97,9 +97,9 @@ namespace NeuralFX.Hub.Services
                             }
                             else if (Regex.IsMatch(info.GpuName, @"\bRTX\b", RegexOptions.IgnoreCase))
                             {
-                                info.DetectedArchitecture = GpuArchitecture.Blackwell;
-                                info.Architecture = "NVIDIA RTX (Arquitectura moderna · DLSS compatible)";
-                                info.SupportsDLSS = true;
+                                info.DetectedArchitecture = GpuArchitecture.Unknown;
+                                info.Architecture = "NVIDIA RTX no clasificada; consultar capacidades en el dispositivo activo";
+                                info.SupportsDLSS = false;
                             }
                             else
                             {

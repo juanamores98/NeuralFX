@@ -37,34 +37,8 @@ namespace NeuralFX.Hub.Services
         }
         public void ConfigureForHardware(List<DependencyItem> items, HardwareInfo? info)
         {
-            if (info == null) return;
-            var nr = items.FirstOrDefault(x => x.Id == "nvngx_dlssnr");
-            if (nr == null) return;
-
-            if (info.DetectedArchitecture == GpuArchitecture.AdaLovelace)
-            {
-                nr.DownloadUrl = "https://github.com/RankFTW/rhi-repo/releases/download/dlssnr-310.8.0-RTX40/nvngx_dlssnr_310.8.0-RTX40.zip";
-                nr.ExpectedSha256 = "46124cfaef532ad5f6da07494772ea8c1b3e719f934e254385697f38d1289e3f";
-                nr.ExpectedFileSha256["nvngx_dlssnr.dll"] = "4b8d19bc3eff58a084f5eca7489c921501c203450169fb82ff4f649a4482ba05";
-                nr.Version = "310.8.0-RTX40";
-                nr.Description = "Runtime DLSSNR adaptado para arquitecturas Ada Lovelace (RTX 40xx · SM 89).";
-            }
-            else if (info.DetectedArchitecture == GpuArchitecture.AmpereTuring)
-            {
-                nr.DownloadUrl = "https://github.com/RankFTW/rhi-repo/releases/download/dlssnr-310.8.SF-v2/nvngx_dlssnr_310.8.SF-v2.zip";
-                nr.ExpectedSha256 = "1da35941894994eb087e017577829e492454e9bae3a6a9397027069ceb74955c";
-                nr.ExpectedFileSha256["nvngx_dlssnr.dll"] = "6eb209e764f39872625debd6abaf45e2bb6322f6f270f781f70c059ae30b3927";
-                nr.Version = "310.8.SF-v2";
-                nr.Description = "Runtime DLSSNR adaptado para arquitecturas Ampere/Turing (RTX 30xx/20xx · FP16).";
-            }
-            else
-            {
-                nr.DownloadUrl = "https://github.com/RankFTW/rhi-repo/releases/download/dlssnr-310.8.0/nvngx_dlssnr_310.8.0.zip";
-                nr.ExpectedSha256 = "388c0a7912e15ec911b9c9e11a692142b11fe387ddf2b637d8c358138fffb3ac";
-                nr.ExpectedFileSha256["nvngx_dlssnr.dll"] = "e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e";
-                nr.Version = "310.8.0";
-                nr.Description = "Runtime DLSSNR oficial para arquitecturas Blackwell (RTX 50xx · FP8 nativo).";
-            }
+            // Registry model names are preliminary inventory, never permission to
+            // substitute patched runtimes. The selected, pinned tuple stays unchanged.
         }
         internal static List<DependencyItem> ReadCatalog()
         {
@@ -191,8 +165,10 @@ namespace NeuralFX.Hub.Services
         }
         private void ImportBytes(DependencyItem item, byte[] source, string kind)
         {
-            if (item.CanAutoDownload && (string.IsNullOrEmpty(item.ExpectedSha256) || Hash(source) != item.ExpectedSha256))
+            if (kind != "Direct" && !string.IsNullOrEmpty(item.ExpectedSha256) && Hash(source) != item.ExpectedSha256)
                 throw new InvalidDataException("El paquete no coincide con la versión y SHA-256 del catálogo.");
+            if (kind == "Direct" && item.CanAutoDownload && !item.ExpectedFileSha256.ContainsKey(item.TargetRelativePath))
+                throw new InvalidDataException("Importación directa sin hash de archivo fijado; importa el contenedor del catálogo.");
             string root = PackageDirectory(item);
             Directory.CreateDirectory(root);
             var payload = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
@@ -204,6 +180,9 @@ namespace NeuralFX.Hub.Services
                     var matches = archive.Entries.Where(e => e.FullName.Replace('\\', '/').Equals(pair.Key, StringComparison.OrdinalIgnoreCase) ||
                         e.FullName.Replace('\\', '/').EndsWith("/" + pair.Key, StringComparison.OrdinalIgnoreCase)).ToArray();
                     if (matches.Length != 1 || matches[0].Length > 512L * 1024 * 1024) throw new InvalidDataException("Recurso ausente, ambiguo o demasiado grande: " + pair.Key);
+                    string entryPath = matches[0].FullName.Replace('\\', '/');
+                    if (entryPath.StartsWith('/') || entryPath.Split('/').Any(x => x == ".." || x.Contains(':')) || ((matches[0].ExternalAttributes >> 16) & 0xF000) == 0xA000)
+                        throw new InvalidDataException("Ruta ZIP no admitida: " + entryPath);
                     using var input = matches[0].Open(); using var output = new MemoryStream();
                     input.CopyTo(output); payload.Add(pair.Value, output.ToArray());
                 }
@@ -214,7 +193,7 @@ namespace NeuralFX.Hub.Services
                 if (GetPackageFiles(item).Count != 1) throw new InvalidDataException("Importa el paquete ZIP completo.");
                 payload.Add(item.TargetRelativePath, source);
             }
-            var receipt = new Receipt { SourceSha256 = item.ExpectedSha256 };
+            var receipt = new Receipt { SourceSha256 = item.ExpectedSha256, ActualSourceSha256 = Hash(source), SourceKind = kind };
             using var lease = new InstallationLease(root);
             using var transaction = new FileTransaction(root);
             foreach (var pair in payload)
@@ -258,6 +237,8 @@ namespace NeuralFX.Hub.Services
         private sealed class Receipt
         {
             public string? SourceSha256 { get; set; }
+            public string? ActualSourceSha256 { get; set; }
+            public string? SourceKind { get; set; }
             public Dictionary<string, string> Files { get; set; } = new();
         }
     }

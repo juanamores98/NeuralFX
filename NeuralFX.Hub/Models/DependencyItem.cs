@@ -57,6 +57,10 @@ namespace NeuralFX.Hub.Models
         public string[]? Aliases { get; set; }
         public string? ExpectedSha256 { get; set; }
         public string Version { get; set; } = "";
+        public string Author { get; set; } = "";
+        public string Distributor { get; set; } = "";
+        public string LicenseStatus { get; set; } = "";
+        public string TrustPolicy { get; set; } = "PinnedHash";
         // Exact archive suffix -> game-relative destination, including companion resources.
         public Dictionary<string, string> PackageFiles { get; set; } = new();
         public string? ReleaseRepository { get; set; }

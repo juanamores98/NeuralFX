@@ -1,0 +1,38 @@
+name: NeuralFX contracts and Windows integration
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  abi-sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Real bridge decoder with ASan and UBSan
+        run: |
+          g++ -std=c++17 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer Native/bridge_tests.cpp -o /tmp/bridge-tests
+          /tmp/bridge-tests
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Hub and IPC tests (no game assemblies)
+        run: dotnet test NeuralFX.Tests/NeuralFX.Tests.csproj -c Release -p:BuildMod=false --logger 'trx;LogFileName=hub.trx'
+      - name: Mod contracts with Unity doubles
+        run: dotnet run --project tests/ModContracts/ModContracts.csproj -c Release
+      - name: Build pinned feeder and native tests
+        shell: pwsh
+        run: ./Native/build.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-evidence
+          path: |
+            NeuralFX.Tests/TestResults/*.trx
+            Native/out/*

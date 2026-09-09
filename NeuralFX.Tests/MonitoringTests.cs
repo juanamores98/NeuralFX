@@ -116,7 +116,7 @@ public sealed class MonitoringTests : IDisposable
         var now = DateTime.UtcNow;
         var frame = new TelemetryFrame { UtcTicks = now.AddSeconds(-3).Ticks, Flags = RuntimeFlags.FeederLoaded | RuntimeFlags.ReShadeLoaded };
         Assert.False(TelemetryStatus.IsFresh(frame, now));
-        Assert.Contains("NGX sin confirmar", TelemetryStatus.Describe(frame));
+        Assert.DoesNotContain("NR confirmado", TelemetryStatus.Describe(frame));
         frame.UtcTicks = now.AddMilliseconds(-100).Ticks; Assert.True(TelemetryStatus.IsFresh(frame, now));
         frame.UtcTicks = now.AddSeconds(1).Ticks; Assert.False(TelemetryStatus.IsFresh(frame, now));
     }

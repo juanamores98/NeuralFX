@@ -11,13 +11,19 @@ namespace NeuralFX.Hub.Models
         Blackwell       // RTX 50xx (SM 120) -> dlssnr-310.8.0
     }
 
+    public enum FeatureSupport { Unknown, Supported, Unsupported }
+
     public class HardwareInfo
     {
         public string GpuName { get; set; } = "Desconocido";
         public bool IsNvidia { get; set; }
         public string Architecture { get; set; } = "Desconocida";
         public GpuArchitecture DetectedArchitecture { get; set; } = GpuArchitecture.Unknown;
-        public bool SupportsDLSS { get; set; }
+        public bool SupportsDLSS { get; set; } // preliminary family hint, never authoritative
+        public FeatureSupport SuperResolution { get; set; } = FeatureSupport.Unknown;
+        public FeatureSupport Dlaa { get; set; } = FeatureSupport.Unknown;
+        public FeatureSupport NeuralRendering { get; set; } = FeatureSupport.Unknown;
+        public string AdapterSource { get; set; } = "Registro (preliminar; puede no ser la GPU del juego)";
         public ulong VramBytes { get; set; }
         public double VramMB => VramBytes / (1024.0 * 1024.0);
         public double VramGB => VramBytes / (1024.0 * 1024.0 * 1024.0);

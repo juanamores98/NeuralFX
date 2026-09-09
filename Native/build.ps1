@@ -16,7 +16,7 @@ function Replace-Once([string]$Text, [string]$Before, [string]$After) {
     if (($Text.Split(@($Before), [StringSplitOptions]::None).Count - 1) -ne 1) { throw "Native patch marker missing or ambiguous: $Before" }
     return $Text.Replace($Before, $After)
 }
-$source = Replace-Once $source '#define FEED_VERSION "0.14.0-beta.4"' ('#include "neuralfx_bridge.h"' + "`n" + '#define FEED_VERSION "0.14.0-beta.4-neuralfx.3"')
+$source = Replace-Once $source '#define FEED_VERSION "0.14.0-beta.4"' ('#include "neuralfx_inputs.h"' + "`n" + '#define FEED_VERSION "0.14.0-beta.4-neuralfx.4"')
 $source = Replace-Once $source '    CK("queue Signal(fence12)");' @'
     CK("queue Signal(fence12)");
     if (FAILED(neuralfx_signal) || FAILED(g.dev12->GetDeviceRemovedReason()))
@@ -33,62 +33,86 @@ if ($start -lt 0 -or $end -lt 0) { throw 'D3D11 function boundary changed.' }
 $body = $source.Substring($start, $end - $start)
 $marker = '    g.mask_ok = mask != nullptr && kd.Width == cd.Width && kd.Height == cd.Height && kd.Format == DXGI_FORMAT_R8_UNORM;'
 $nativeMvInjection = @'
-    NeuralFxFrame neuralfx_frame = {};
+    NeuralFxFrameV3 neuralfx_frame = {};
     const bool neuralfx_valid = NeuralFxTakeFrame(cd.Width, cd.Height, neuralfx_frame);
-    if (neuralfx_valid && neuralfx_frame.motion_vectors_ptr != 0)
-    {
-        IUnknown *unk = reinterpret_cast<IUnknown *>(neuralfx_frame.motion_vectors_ptr);
-        ID3D11ShaderResourceView *srv = nullptr;
-        ID3D11Resource *res = nullptr;
-        if (SUCCEEDED(unk->QueryInterface(__uuidof(ID3D11ShaderResourceView), reinterpret_cast<void **>(&srv))))
-        {
-            srv->GetResource(&res);
-            srv->Release();
-        }
-        else if (SUCCEEDED(unk->QueryInterface(__uuidof(ID3D11Resource), reinterpret_cast<void **>(&res))))
-        {
-        }
-        if (res != nullptr)
-        {
-            D3D11_TEXTURE2D_DESC nmd = {};
-            ID3D11Texture2D *native_mv = AsTexture2D(res, &nmd);
-            res->Release();
-            if (native_mv != nullptr && nmd.Width == cd.Width && nmd.Height == cd.Height)
-            {
-                SafeRelease(mv);
-                mv = native_mv;
-                md = nmd;
-            }
-            else
-            {
-                SafeRelease(native_mv);
-            }
-        }
+    if (!neuralfx_valid) {
+        SafeRelease(color); SafeRelease(mv); SafeRelease(depth); SafeRelease(mask);
+        return; // never evaluate a stale frame or an auxiliary Present
     }
+    NeuralFxPendingOutput* neuralfx_output = NeuralFxPrepareOutput(ctx);
+    if (!neuralfx_output) {
+        SafeRelease(color); SafeRelease(mv); SafeRelease(depth); SafeRelease(mask);
+        return; // bounded queue: leave the current scene untouched
+    }
+    bool neuralfx_committed = false;
+    ID3D11Device* neuralfx_device = nullptr; ctx->GetDevice(&neuralfx_device);
+    NeuralFxSelectedMotion neuralfx_motion;
+    neuralfx_motion.Select(neuralfx_device, neuralfx_frame, mv,
+        reinterpret_cast<ID3D11ShaderResourceView*>(mv_srv.handle), g_cfg.mv_scale_x, g_cfg.mv_scale_y);
+    // Device identity comes from the actual rendering device, never registry order.
+    IDXGIDevice* neuralfx_dxgi = nullptr;
+    if (SUCCEEDED(neuralfx_device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&neuralfx_dxgi)))) {
+        IDXGIAdapter* adapter = nullptr;
+        if (SUCCEEDED(neuralfx_dxgi->GetAdapter(&adapter))) {
+            DXGI_ADAPTER_DESC info = {}; adapter->GetDesc(&info);
+            { std::lock_guard<std::mutex> lock(nfx_lock); nfx_result.adapter_low = info.AdapterLuid.LowPart; nfx_result.adapter_high = info.AdapterLuid.HighPart; }
+            adapter->Release();
+        }
+        neuralfx_dxgi->Release();
+    }
+    neuralfx_device->Release();
+    static uint32_t neuralfx_previous_provider = 0;
+    if (neuralfx_previous_provider != neuralfx_motion.provider) { g.need_reset = true; neuralfx_previous_provider = neuralfx_motion.provider; }
 '@
 $body = Replace-Once $body $marker ($marker + "`n" + $nativeMvInjection)
-$body = Replace-Once $body 'ep.InReset           = reset;' 'ep.InReset           = reset || (neuralfx_valid && NeuralFxResetNeeded(neuralfx_frame));'
-$body = Replace-Once $body 'ep.InJitterOffsetX   = g.sr_active ? static_cast<float>(g_cfg.jitter_sign) * g.jitter_x : 0.0f;' 'ep.InJitterOffsetX   = neuralfx_valid ? neuralfx_frame.jitter_x : (g.sr_active ? static_cast<float>(g_cfg.jitter_sign) * g.jitter_x : 0.0f);'
-$body = Replace-Once $body 'ep.InJitterOffsetY   = g.sr_active ? static_cast<float>(g_cfg.jitter_sign) * g.jitter_y : 0.0f;' 'ep.InJitterOffsetY   = neuralfx_valid ? neuralfx_frame.jitter_y : (g.sr_active ? static_cast<float>(g_cfg.jitter_sign) * g.jitter_y : 0.0f);'
-$body = Replace-Once $body 'ep.InMVScaleX        = g_cfg.mv_scale_x;' 'ep.InMVScaleX        = (neuralfx_valid && neuralfx_frame.mv_scale_x != 0.0f) ? neuralfx_frame.mv_scale_x : g_cfg.mv_scale_x;'
-$body = Replace-Once $body 'ep.InMVScaleY        = g_cfg.mv_scale_y;' 'ep.InMVScaleY        = (neuralfx_valid && neuralfx_frame.mv_scale_y != 0.0f) ? neuralfx_frame.mv_scale_y : g_cfg.mv_scale_y;'
-$body = Replace-Once $body 'AbortCommands();  // never execute a list NGX crashed while recording' ('AbortCommands();  // never execute a list NGX crashed while recording' + "`n                    if (neuralfx_valid) NeuralFxEvaluated(neuralfx_frame, false, g.width, g.height);")
-# NGX success means recording succeeded. A failed Close must never be reported as a
-# delivered frame, copied back, or used to acknowledge a camera-history reset.
+$body = Replace-Once $body 'CopyOrResampleInputs(ctx, color, mv, depth, mask,' 'CopyOrResampleInputs(ctx, color, neuralfx_motion.texture, depth, mask,'
+$body = Replace-Once $body 'reinterpret_cast<ID3D11ShaderResourceView *>(mv_srv.handle),' 'neuralfx_motion.view,'
+$body = Replace-Once $body 'ep.InReset           = reset;' 'ep.InReset           = reset || NeuralFxResetNeeded(neuralfx_frame);'
+$body = Replace-Once $body 'ep.InMVScaleX        = g_cfg.mv_scale_x;' 'ep.InMVScaleX        = neuralfx_motion.scale_x;'
+$body = Replace-Once $body 'ep.InMVScaleY        = g_cfg.mv_scale_y;' 'ep.InMVScaleY        = neuralfx_motion.scale_y;'
+$body = Replace-Once $body 'AbortCommands();  // never execute a list NGX crashed while recording' ('AbortCommands();  // never execute a list NGX crashed while recording' + "`n                    NeuralFxRecorded(neuralfx_frame, static_cast<int32_t>(ecode), false, g.width, g.height, neuralfx_motion.provider);")
 $body = Replace-Once $body 'const UINT64 v_out = EndCommands();' @'
 const UINT64 v_out = EndCommands();
-                if (neuralfx_valid) NeuralFxEvaluated(neuralfx_frame, !NVSDK_NGX_FAILED(re) && v_out != 0, g.width, g.height);
+                NeuralFxRecorded(neuralfx_frame, NVSDK_NGX_FAILED(re) ? static_cast<int32_t>(re) : (v_out ? 0 : -1), v_out != 0, g.width, g.height, neuralfx_motion.provider);
                 if (v_out == 0)
                 {
-                    FeedDisable("the D3D12 command list could not be submitted; see dlss5-feed.log");
+                    FeedDisable("D3D12 submission failed; preserving the current scene");
                     g.frame_ready = false;
                     ok = false;
                 }
                 else
 '@
+$body = Replace-Once $body ('                    g.ctx4->Wait(g.fence11, v_out);' + "`n" + '                    BlitOutputToBackbuffer(ctx, rtv11);') @'
+                    const HRESULT neuralfx_wait = g.ctx4->Wait(g.fence11, v_out);
+                    if (SUCCEEDED(neuralfx_wait) && SUCCEEDED(g.dev11->GetDeviceRemovedReason())) {
+                        BlitOutputToBackbuffer(ctx, rtv11);
+                        neuralfx_committed = true;
+                    } else {
+                        NeuralFxRecorded(neuralfx_frame, static_cast<int32_t>(neuralfx_wait), false, g.width, g.height, neuralfx_motion.provider);
+                        FeedDisable("D3D11 result wait failed; restart the game");
+                    }
+'@
+$body = Replace-Once $body ('    SafeRelease(color);' + "`n" + '    SafeRelease(mv);') ('    NeuralFxFinishOutput(neuralfx_output, neuralfx_frame, neuralfx_committed);' + "`n" + '    SafeRelease(color);' + "`n" + '    SafeRelease(mv);')
 $source = $source.Substring(0, $start) + $body + $source.Substring($end)
+$source = Replace-Once $source '    if (!g_cfg.enabled || g.disabled || g_cfg.mode == 0) return;' '    if (!NeuralFxEnabled() || !g_cfg.enabled || g.disabled || g_cfg.mode == 0) return;'
+$source = Replace-Once $source 'static void DrawOverlay(reshade::api::effect_runtime *rt)' @'
+// Apply only the techniques owned by NeuralFX. Foreign techniques keep their state.
+static void NeuralFxBeginEffects(reshade::api::effect_runtime* rt, reshade::api::command_list*, reshade::api::resource_view, reshade::api::resource_view) {
+    NeuralFxPollOutputs();
+    const bool active = NeuralFxEnabled();
+    static bool previous = false;
+    if (active != previous) { g.need_reset = true; previous = active; }
+    auto feed = rt->find_technique("DLSS5_Feed.fx", "DLSS5_Feed");
+    auto cas = rt->find_technique("NeuralFX_CAS.fx", "NeuralFX_CAS");
+    if (feed.handle && rt->get_technique_state(feed) != active) rt->set_technique_state(feed, active);
+    if (cas.handle && rt->get_technique_state(cas) != active) rt->set_technique_state(cas, active);
+}
+static void DrawOverlay(reshade::api::effect_runtime *rt)
+'@
+$source = Replace-Once $source '        reshade::register_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' ('        reshade::register_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' + "`n" + '        reshade::register_event<reshade::addon_event::reshade_begin_effects>(NeuralFxBeginEffects);')
+$source = Replace-Once $source '        reshade::unregister_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' ('        reshade::unregister_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' + "`n" + '        reshade::unregister_event<reshade::addon_event::reshade_begin_effects>(NeuralFxBeginEffects);')
 Set-Content -LiteralPath (Join-Path $upstreamRoot 'src/dlss5-feed.cpp') -Value $source -Encoding utf8
-Copy-Item -LiteralPath (Join-Path $nativeRoot 'neuralfx_bridge.h') -Destination (Join-Path $upstreamRoot 'src/neuralfx_bridge.h') -Force
+Get-ChildItem -LiteralPath $nativeRoot -Filter 'neuralfx_*.h' | Copy-Item -Destination (Join-Path $upstreamRoot 'src') -Force
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
 $vs = & $vswhere -latest -prerelease -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 Push-Location $upstreamRoot

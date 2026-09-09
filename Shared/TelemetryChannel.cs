@@ -5,7 +5,7 @@ using System.Threading;
 namespace NeuralFX.Protocol
 {
     [Flags]
-    public enum RuntimeFlags { None = 0, ReShadeLoaded = 1, FeederLoaded = 2, ConsumerLoaded = 4, DepthRequested = 8, MotionRequested = 16, CameraPresent = 32, NativeConnected = 64, EvaluationSucceeded = 128, NativeMotion = 256, JitterActive = 512 }
+    public enum RuntimeFlags { None = 0, ReShadeLoaded = 1, FeederLoaded = 2, ConsumerLoaded = 4, DepthRequested = 8, MotionRequested = 16, CameraPresent = 32, NativeConnected = 64, EvaluationSucceeded = 128, NativeMotion = 256, JitterActive = 512, PipelineRequested = 1024, OutputCommitted = 2048, NrConfirmed = 4096, UiIsolated = 8192 }
 
     [StructLayout(LayoutKind.Sequential, Pack = 8)]
     public struct TelemetryFrame
@@ -20,16 +20,21 @@ namespace NeuralFX.Protocol
         public int NativeStatus, ResetCount;
         public int WorkWidth, WorkHeight, Evaluations;
         public long SessionId;
+        public uint DeviceEpoch, CameraId, RecordedFrame, SubmittedFrame, CompletedFrame, OutputFrame, MotionProvider;
+        public uint AdapterLow; public int AdapterHigh;
+        public CommandResult CommandResult;
+        public int CommandReason, BackendError;
     }
-    public enum CommandKind { None = 0, TogglePanel = 1, ReapplyBuffers = 2, ResetHistory = 3 }
+    public enum CommandKind { None = 0, TogglePanel = 1, ReapplyBuffers = 2, ResetHistory = 3, EnablePipeline = 4, DisablePipeline = 5 }
+    public enum CommandResult { None = 0, Accepted = 1, Applied = 2, Rejected = 3 }
     [StructLayout(LayoutKind.Sequential, Pack = 8)]
-    public struct TelemetryCommand { public int Magic, Version, Revision; public CommandKind Kind; public long SessionId; }
+    public struct TelemetryCommand { public int Magic, Version, Revision; public CommandKind Kind; public long SessionId; public long ExpiresUtcTicks; }
 
     // Two separately sequenced regions, each with exactly one writer. No GPU resources cross into the Hub.
     public sealed unsafe class TelemetryChannel : IDisposable
     {
         public const int Magic = 0x4E465832;
-        public const int Version = 3;
+        public const int Version = 4;
         private IntPtr _mapping, _view;
         private readonly bool _owner;
         private readonly long _session;
@@ -90,6 +95,7 @@ namespace NeuralFX.Protocol
         {
             if (_owner || _view == IntPtr.Zero) return;
             command.Magic = Magic; command.Version = Version;
+            if (command.ExpiresUtcTicks == 0) command.ExpiresUtcTicks = DateTime.UtcNow.AddSeconds(5).Ticks;
             byte* memory = (byte*)_view + 512;
             BeginWrite((int*)memory);
             *(TelemetryCommand*)(memory + 8) = command;

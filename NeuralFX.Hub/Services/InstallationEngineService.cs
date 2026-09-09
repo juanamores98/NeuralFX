@@ -17,10 +17,10 @@ namespace NeuralFX.Hub.Services
         public InstallationEngineService(DependencyManagerService dependencyManager, Func<bool>? isGameRunning = null)
         { _dependencies = dependencyManager; _isGameRunning = isGameRunning ?? HardwareDiagnosticsService.IsCitiesSkylinesRunning; }
 
-        public Task<bool> InstallAsync(string gameDirectory, List<DependencyItem> items, Action<string>? logAction = null, bool enforceProcessClosed = true, PipelinePreset preset = PipelinePreset.Native)
-            => Task.Run(() => Install(gameDirectory, items, logAction, enforceProcessClosed, preset));
+        public Task<bool> InstallAsync(string gameDirectory, List<DependencyItem> items, Action<string>? logAction = null, bool enforceProcessClosed = true, PipelinePreset preset = PipelinePreset.Native, InstallationPreview? preview = null)
+            => Task.Run(() => Install(gameDirectory, items, logAction, enforceProcessClosed, preset, preview));
 
-        private bool Install(string root, List<DependencyItem> items, Action<string>? log, bool enforceClosed, PipelinePreset preset)
+        private bool Install(string root, List<DependencyItem> items, Action<string>? log, bool enforceClosed, PipelinePreset preset, InstallationPreview? preview)
         {
             try
             {
@@ -28,6 +28,7 @@ namespace NeuralFX.Hub.Services
                 if (enforceClosed && _isGameRunning()) throw new IOException("Cierra Cities: Skylines antes de instalar.");
                 using var lease = new InstallationLease(root);
                 FileTransaction.Recover(root);
+                preview?.ValidateUnchanged(root);
                 string manifestPath = ManagedPaths.Resolve(root, "NeuralFX_Manifest.json");
                 byte[]? previousManifest = null;
                 var manifest = new InstallationManifest { SchemaVersion = 2, GameDirectory = Path.GetFullPath(root) };
@@ -90,6 +91,7 @@ namespace NeuralFX.Hub.Services
                 manifest.GameExecutableSha256 = File.Exists(gameExe) ? DependencyManagerService.CalculateSha256(gameExe) : null;
                 transaction.Write("NeuralFX_Manifest.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true })));
                 if (enforceClosed && _isGameRunning()) throw new IOException("El juego se abrió durante la preparación. Instalación cancelada.");
+                preview?.ValidateUnchanged(root);
                 transaction.Commit(AfterWrite);
                 log?.Invoke("Instalación registrada. Comprueba en juego el efecto, los buffers y las evaluaciones; archivos presentes no significa inferencia activa.");
                 return true;

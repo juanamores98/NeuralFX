@@ -7,21 +7,44 @@ namespace NeuralFX.Config
 {
     public class ModSettingsData
     {
-        public bool ForceMotionVectorsOnLoad = true;
-        public bool EnableCameraJitter = true;
-        public bool EnableNativeMotionVectors = true;
-        public bool EnhanceTextureClarity = true;
+        public bool ForceMotionVectorsOnLoad = false;
+        public bool PipelineEnabled = true;
+        public bool ExperimentalOptIn = false;
+        public bool ImportedJitterPreference;
+        public bool ImportedNativeMotionPreference;
+        public bool ImportedClarityPreference;
+        public bool EnableRenderTrace;
+        public bool EnableCameraJitter = false;
+        public bool EnableNativeMotionVectors = false;
+        public bool EnhanceTextureClarity = false;
         public bool WarnOnAaConflict = true;
         public bool EnableHotkey = true;
         public bool EnableUui = true;
-        public int SchemaVersion = 2;
+        public int SchemaVersion = 0;
         public float PanelX = 40f;
         public float PanelY = 80f;
     }
 
     public static class ModSettings
     {
-        private static ModSettingsData _data = new ModSettingsData();
+        private static ModSettingsData _data = new ModSettingsData { SchemaVersion = 3 };
+        public static string LastSaveError { get; private set; }
+        public static bool PipelineEnabled { get { return _data.PipelineEnabled; } set { _data.PipelineEnabled = value; } }
+        public static bool ExperimentalOptIn { get { return _data.ExperimentalOptIn; } set { _data.ExperimentalOptIn = value; } }
+        public static bool EnableRenderTrace { get { return _data.EnableRenderTrace; } set { _data.EnableRenderTrace = value; } }
+        public static string MigrationNotice { get { return _data.ImportedClarityPreference ? "Se retiró el ajuste global de LOD/anisotropía. Reinicia el juego para recuperar su configuración de inicio; no existe snapshot antiguo fiable." : ""; } }
+        public static ModSettingsData Migrate(ModSettingsData data)
+        {
+            if (data.SchemaVersion < 3) {
+                data.ImportedJitterPreference = data.EnableCameraJitter;
+                data.ImportedNativeMotionPreference = data.EnableNativeMotionVectors;
+                data.ImportedClarityPreference = data.EnhanceTextureClarity;
+                data.EnableCameraJitter = data.EnableNativeMotionVectors = data.EnhanceTextureClarity = false;
+                data.ForceMotionVectorsOnLoad = false; data.ExperimentalOptIn = false;
+                data.SchemaVersion = 3;
+            }
+            return data;
+        }
         public static float PanelX { get { return _data.PanelX; } set { _data.PanelX = value; } }
         public static float PanelY { get { return _data.PanelY; } set { _data.PanelY = value; } }
 
@@ -86,7 +109,8 @@ namespace NeuralFX.Config
                         var loaded = serializer.Deserialize(reader) as ModSettingsData;
                         if (loaded != null)
                         {
-                            _data = loaded;
+                            if (loaded.SchemaVersion > 3) throw new InvalidDataException("Configuración de una versión posterior: no se sobrescribe.");
+                            _data = Migrate(loaded);
                         }
                     }
                 }
@@ -97,7 +121,7 @@ namespace NeuralFX.Config
             }
         }
 
-        public static void Save()
+        public static bool Save()
         {
             try
             {
@@ -116,10 +140,13 @@ namespace NeuralFX.Config
                 }
                 if (File.Exists(path)) File.Replace(temporary, path, null);
                 else File.Move(temporary, path);
+                LastSaveError = null; return true;
             }
             catch (Exception ex)
             {
+                LastSaveError = ex.Message;
                 Debug.LogWarning("[NeuralFX] Error guardando configuracion: " + ex.Message);
+                return false;
             }
         }
     }

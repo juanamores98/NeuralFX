@@ -24,6 +24,9 @@ namespace NeuralFX.Hub.Services
             string ini = Read("ReShade.ini");
             ini = Ini.Set(ini, "GENERAL", "EffectSearchPaths", MergePaths(Ini.Get(ini, "GENERAL", "EffectSearchPaths"), @".\reshade-shaders\Shaders"));
             ini = Ini.Set(ini, "GENERAL", "TextureSearchPaths", MergePaths(Ini.Get(ini, "GENERAL", "TextureSearchPaths"), @".\reshade-shaders\Textures"));
+            string activePreset = Ini.Get(ini, "GENERAL", "PresetPath").Replace('\\', '/');
+            if (activePreset.Length > 0 && activePreset != "./ReShadePreset.ini" && activePreset != "ReShadePreset.ini")
+                throw new InvalidDataException("Preset activo distinto de ReShadePreset.ini: " + activePreset + ". Selecciona explícitamente el preset de NeuralFX antes de instalar; se conserva el actual.");
             ini = Ini.Set(ini, "GENERAL", "PresetPath", @".\ReShadePreset.ini");
             ini = Ini.Set(ini, "GENERAL", "StartupPresetPath", @".\ReShadePreset.ini");
             ini = Ini.Set(ini, "GENERAL", "NoReloadOnInit", "0");
@@ -40,13 +43,9 @@ namespace NeuralFX.Hub.Services
             string reshadePreset = Read("ReShadePreset.ini");
             string techniques = Ini.Get(reshadePreset, "", "Techniques");
             string[] ours = { "Lumenite_Kernel@lumenite_Kernel.fx", "DLSS5_Feed@DLSS5_Feed.fx", "NeuralFX_CAS@NeuralFX_CAS.fx" };
-            var otherTechs = techniques.Split(',')
-                .Select(x => x.Trim())
-                .Where(x => x.Length > 0 && !ours.Contains(x, StringComparer.OrdinalIgnoreCase) && !x.StartsWith("CAS@", StringComparison.OrdinalIgnoreCase) && !x.StartsWith("DLSS5_Feed_Debug@", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            string finalTechs = string.Join(",", otherTechs.Concat(ours));
-            reshadePreset = Ini.Set(reshadePreset, "", "Techniques", finalTechs);
-            reshadePreset = Ini.Set(reshadePreset, "", "TechniqueSorting", finalTechs);
+            reshadePreset = Ini.Set(reshadePreset, "", "Techniques", InsertOwned(techniques, ours));
+            string sorting = Ini.Get(reshadePreset, "", "TechniqueSorting");
+            reshadePreset = Ini.Set(reshadePreset, "", "TechniqueSorting", InsertOwned(string.IsNullOrWhiteSpace(sorting) ? techniques : sorting, ours));
             reshadePreset = Ini.Set(reshadePreset, "DLSS5_Feed.fx", "PreprocessorDefinitions", "DLSS5_MV_PROVIDER=3");
             reshadePreset = Ini.Set(reshadePreset, "NeuralFX_CAS.fx", "Sharpening", sharpness.ToString(CultureInfo.InvariantCulture));
             files["ReShadePreset.ini"] = Encoding.UTF8.GetBytes(reshadePreset);
@@ -54,6 +53,16 @@ namespace NeuralFX.Hub.Services
             using var output = new MemoryStream(); stream.CopyTo(output);
             files["reshade-shaders/Shaders/NeuralFX_CAS.fx"] = output.ToArray();
             return files;
+        }
+        internal static string InsertOwned(string text, string[] owned)
+        {
+            var original = text.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+            int anchor = original.FindIndex(x => owned.Contains(x, StringComparer.OrdinalIgnoreCase));
+            if (anchor < 0) anchor = original.Count;
+            int before = original.Take(anchor).Count(x => !owned.Contains(x, StringComparer.OrdinalIgnoreCase));
+            var foreign = original.Where(x => !owned.Contains(x, StringComparer.OrdinalIgnoreCase)).ToList();
+            foreign.InsertRange(before, owned);
+            return string.Join(",", foreign);
         }
         private static string MergePaths(string existing, string addition) => string.Join(",", (existing + "," + addition).Split(',').Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase));
     }
@@ -72,19 +81,29 @@ namespace NeuralFX.Hub.Services
         }
         public static string Get(string text, string section, string key)
         {
-            string current = "";
-            foreach (string line in text.Replace("\r", "").Split('\n'))
-            {
+            string current = ""; string? found = null;
+            foreach (string line in text.Replace("\r", "").Split('\n')) {
                 string trim = line.Trim();
                 if (trim.StartsWith('[') && trim.EndsWith(']')) current = trim[1..^1];
                 int index = line.IndexOf('=');
-                if (index > 0 && current.Equals(section, StringComparison.OrdinalIgnoreCase) && line[..index].Trim().Equals(key, StringComparison.OrdinalIgnoreCase)) return line[(index + 1)..].Trim();
+                if (index > 0 && current.Equals(section,StringComparison.OrdinalIgnoreCase) && line[..index].Trim().Equals(key,StringComparison.OrdinalIgnoreCase)) {
+                    string value = line[(index+1)..].Trim();
+                    if (found != null && found != value) throw new InvalidDataException("Clave INI duplicada con valores distintos: [" + section + "] " + key);
+                    found = value;
+                }
             }
-            return "";
+            return found ?? "";
         }
         public static string Set(string text, string section, string key, string value)
         {
-            var lines = text.Replace("\r", "").Split('\n').ToList();
+            Get(text,section,key); // reject ambiguous input before changing anything
+            var lines = new List<string>(); string scan = "";
+            foreach (string line in text.Replace("\r", "").Split('\n')) {
+                string trim = line.Trim(); if (trim.StartsWith('[') && trim.EndsWith(']')) scan = trim[1..^1];
+                int equals = line.IndexOf('=');
+                if (equals > 0 && scan.Equals(section,StringComparison.OrdinalIgnoreCase) && line[..equals].Trim().Equals(key,StringComparison.OrdinalIgnoreCase)) continue;
+                lines.Add(line);
+            }
             string current = ""; int insert = section == "" ? 0 : -1;
             for (int i = 0; i < lines.Count; i++)
             {

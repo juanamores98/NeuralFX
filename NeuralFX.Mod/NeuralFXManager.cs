@@ -21,6 +21,10 @@ namespace NeuralFX
         private RuntimeFlags _moduleFlags;
         private string[] _conflicts = new string[0];
         private int _pid;
+        private CommandResult _commandResult;
+        private int _commandReason;
+        public TelemetryFrame CurrentFrame { get; private set; }
+        public string BridgeReason { get { return _bridge.Reason; } }
         public static void ToggleWindow() { if (_instance != null) _instance._panel.Toggle(); }
         public void Awake()
         {
@@ -29,6 +33,7 @@ namespace NeuralFX
             ModSettings.Load();
             _pid = NativeInterop.GetCurrentProcessId();
             _channel = TelemetryChannel.Open(_pid, true);
+            RenderStageProbe.Start();
         }
         public void Update()
         {
@@ -46,7 +51,7 @@ namespace NeuralFX
                     if (_camera != null) { _temporal = _camera.gameObject.AddComponent<TemporalCamera>(); _temporal.Bridge = _bridge; _temporal.ResetSerial = ++_resetSerial; }
                 }
             }
-            if (ModSettings.ForceMotionVectorsOnLoad && _camera != null) EnsureCameraModes();
+            if (ModSettings.PipelineEnabled && ModSettings.ExperimentalOptIn && ModSettings.ForceMotionVectorsOnLoad && _camera != null) EnsureCameraModes();
             if (now >= _hooksAt)
             {
                 _hooksAt = now + 3;
@@ -58,19 +63,29 @@ namespace NeuralFX
             }
             if (now >= _scanAt) { _scanAt = now + 5; _conflicts = ModSettings.WarnOnAaConflict ? AaConflictScanner.Scan(_camera) : new string[0]; }
             if (ModSettings.EnableHotkey && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) &&
-                (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) && Input.GetKeyDown(KeyCode.N)) ToggleWindow();
+                (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) && Input.GetKeyDown(KeyCode.N) && !UI.TelemetryPanel.HasTextFocus()) ToggleWindow();
             TelemetryCommand command;
             if (_channel != null && _channel.TryReadCommand(out command) && command.Revision != _lastCommand)
             {
-                if (command.Kind == CommandKind.TogglePanel) ToggleWindow();
-                else if (command.Kind == CommandKind.ReapplyBuffers) EnsureCameraModes();
-                else if (command.Kind == CommandKind.ResetHistory) RequestHistoryReset();
+                _commandResult = CommandResult.Accepted; _commandReason = 0;
+                if (command.ExpiresUtcTicks < System.DateTime.UtcNow.Ticks) { _commandResult = CommandResult.Rejected; _commandReason = 1; }
+                else if (command.Kind == CommandKind.TogglePanel) { ToggleWindow(); _commandResult = CommandResult.Applied; }
+                else if (command.Kind == CommandKind.ReapplyBuffers && ModSettings.ExperimentalOptIn) { EnsureCameraModes(); _commandResult = CommandResult.Applied; }
+                else if (command.Kind == CommandKind.ResetHistory && _temporal != null) RequestHistoryReset();
+                else if (command.Kind == CommandKind.EnablePipeline || command.Kind == CommandKind.DisablePipeline) {
+                    if (SetPipelineEnabled(command.Kind == CommandKind.EnablePipeline)) _commandResult = CommandResult.Applied;
+                    else { _commandResult = CommandResult.Rejected; _commandReason = 3; }
+                }
+                else { _commandResult = CommandResult.Rejected; _commandReason = 2; }
                 _lastCommand = command.Revision;
             }
             if (now < _publishAt) return;
             _publishAt = now + 0.1f;
+            _bridge.SetEnabled(ModSettings.PipelineEnabled && _camera != null);
             var status = _bridge.ReadStatus();
+            var result = _bridge.ReadResult();
             RuntimeFlags flags = _moduleFlags;
+            if (ModSettings.PipelineEnabled) flags |= RuntimeFlags.PipelineRequested;
             if (_camera != null)
             {
                 flags |= RuntimeFlags.CameraPresent;
@@ -81,20 +96,41 @@ namespace NeuralFX
             bool recent = status.Frame > 0 && status.AgeMs < 2000;
             if (recent && status.Result == 1) flags |= RuntimeFlags.EvaluationSucceeded;
             if (_temporal != null) _resetSerial = _temporal.ResetSerial;
-            if (_channel != null) _channel.Publish(new TelemetryFrame {
+            bool current = _temporal != null && result.Epoch == _temporal.Epoch && recent && ModSettings.PipelineEnabled;
+            if (current && result.MotionProvider == 2) flags |= RuntimeFlags.NativeMotion;
+            if (current && result.OutputCommitted > 0) flags |= RuntimeFlags.OutputCommitted;
+            if (current && result.NrConfirmed != 0) flags |= RuntimeFlags.NrConfirmed;
+            if (current && result.UiIsolated != 0) flags |= RuntimeFlags.UiIsolated;
+            CurrentFrame = new TelemetryFrame {
                 ProcessId = _pid, UtcTicks = System.DateTime.UtcNow.Ticks, Fps = _fps, FrameMs = _frameMs,
                 DisplayWidth = Screen.width, DisplayHeight = Screen.height, RenderWidth = _camera != null ? _camera.pixelWidth : 0,
                 RenderHeight = _camera != null ? _camera.pixelHeight : 0, Flags = flags, CameraCuts = _resetSerial,
                 FrameIndex = Time.frameCount, LastCommand = _lastCommand, NativeStatus = recent ? status.Result : 0, ResetCount = status.ResetSerial,
-                WorkWidth = status.Width, WorkHeight = status.Height, Evaluations = status.Evaluations
-            });
-            if (_panel.Visible) _panel.Update(string.Format("{0:F1} FPS · {1:F2} ms · {2} × {3}", _fps, _frameMs, Screen.width, Screen.height),
-                (flags & RuntimeFlags.EvaluationSucceeded) != 0 ? "Evaluación NGX confirmada por el puente. La calidad del consumidor debe comprobarse visualmente." : "Módulos: " + _moduleFlags + "\nInferencia sin confirmar.",
-                "Buffers solicitados: " + ((_camera != null) ? _camera.depthTextureMode.ToString() : "sin cámara") + "\nResets solicitados/confirmados: " + _resetSerial + "/" + status.ResetSerial,
-                _conflicts.Length == 0 ? "Sin AA adicional detectado por el escáner." : "Revisar AA: " + string.Join(", ", _conflicts));
+                WorkWidth = status.Width, WorkHeight = status.Height, Evaluations = status.Evaluations,
+                DeviceEpoch = result.Epoch, CameraId = result.Camera, RecordedFrame = result.Recorded, SubmittedFrame = result.Submitted,
+                CompletedFrame = result.Completed, OutputFrame = result.OutputCommitted, MotionProvider = current ? result.MotionProvider : 0,
+                AdapterLow = result.AdapterLow, AdapterHigh = result.AdapterHigh, BackendError = current ? result.Error : 0,
+                CommandResult = _commandResult, CommandReason = _commandReason
+            };
+            if (_channel != null) _channel.Publish(CurrentFrame);
+            if (_panel.Visible) _panel.Update(string.Format("{0:F1} FPS · intervalo del juego {1:F2} ms", _fps, _frameMs),
+                SessionViewState.Summary(CurrentFrame), SessionViewState.Details(CurrentFrame),
+                !string.IsNullOrEmpty(ModSettings.LastSaveError) ? "Guardado pendiente: " + ModSettings.LastSaveError :
+                _conflicts.Length == 0 ? "Sin AA adicional detectado. NR requiere comprobación independiente." : "Revisar AA: " + string.Join(", ", _conflicts));
         }
+        public bool SetPipelineEnabled(bool enabled)
+        {
+            ModSettings.PipelineEnabled = enabled;
+            bool saved = ModSettings.Save();
+            bool applied = _bridge.SetEnabled(enabled && _camera != null);
+            if (!enabled && _temporal != null) _temporal.OnDisable();
+            if (enabled) RequestHistoryReset();
+            return saved && applied;
+        }
+
         public void EnsureCameraModes()
         {
+            if (!ModSettings.PipelineEnabled || !ModSettings.ExperimentalOptIn || !_bridge.Connected) return;
             Camera camera = _camera != null ? _camera : Camera.main;
             if (camera == null) return;
             const DepthTextureMode desired = DepthTextureMode.Depth | DepthTextureMode.MotionVectors;
@@ -108,6 +144,7 @@ namespace NeuralFX
         public void OnDestroy()
         {
             if (_instance != this) return;
+            _bridge.SetEnabled(false); RenderStageProbe.Stop();
             _panel.Destroy();
             if (_temporal != null) Destroy(_temporal);
             if (_channel != null) { _channel.Dispose(); _channel = null; }

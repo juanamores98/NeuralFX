@@ -1,71 +1,116 @@
-// NeuralFX extension of the pinned feeder. MIT-0.
-// CPU metadata is latched by a Unity render-thread event before the ReShade evaluate.
+// NeuralFX feeder extension. MIT-0. Metadata is latched on the render thread.
 #pragma once
+#include "neuralfx_contract.h"
+#include <mutex>
+#include <chrono>
+#ifdef _WIN32
 #include <windows.h>
-#include <cstdint>
-
-struct NeuralFxFrame {
-    uint32_t size, version, frame, reset_serial;
-    uint32_t width, height;
-    float jitter_x, jitter_y;
-    uint64_t motion_vectors_ptr;
-    float mv_scale_x, mv_scale_y;
-};
-struct NeuralFxStatus {
-    uint32_t size, version, capabilities, frame;
-    uint32_t reset_serial, evaluations, width, height;
-    int32_t result;
-    uint32_t age_ms;
-};
-static_assert(sizeof(NeuralFxFrame) == 48);
-static_assert(sizeof(NeuralFxStatus) == 40);
-static SRWLOCK nfx_lock = SRWLOCK_INIT;
-static NeuralFxFrame nfx_slots[16] = {};
-static NeuralFxFrame nfx_render_frame = {};
-static NeuralFxStatus nfx_status = {sizeof(NeuralFxStatus), 1, 7}; // capability 1: reset, 2: jitter, 4: native MV
-static uint32_t nfx_taken_frame = 0;
-static ULONGLONG nfx_render_tick = 0;
-static ULONGLONG nfx_evaluate_tick = 0;
-
-extern "C" __declspec(dllexport) int __cdecl NeuralFX_SubmitFrame(const NeuralFxFrame* input) {
-    if (!input || !input->frame || !input->width || !input->height) return 0;
-    if (input->size != sizeof(NeuralFxFrame) && input->size != 32) return 0;
-    if (input->version != 1 && input->version != 2) return 0;
-    // Sub-pixel jitter offsets must be in reasonable pixel range [-2.0, 2.0]
-    if (input->jitter_x < -2.0f || input->jitter_x > 2.0f || input->jitter_y < -2.0f || input->jitter_y > 2.0f) return 0;
-    AcquireSRWLockExclusive(&nfx_lock);
-    nfx_slots[input->frame % 16] = *input;
-    ReleaseSRWLockExclusive(&nfx_lock);
+#define NFX_EXPORT extern "C" __declspec(dllexport)
+#define NFX_CALL __cdecl
+#define NFX_EVENT __stdcall
+#else
+#define NFX_EXPORT extern "C"
+#define NFX_CALL
+#define NFX_EVENT
+#endif
+static std::mutex nfx_lock;
+static uint64_t NeuralFxNow() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+static NeuralFxFrameV3 nfx_slots[16] = {}, nfx_render_frame = {};
+static NeuralFxStatus nfx_status = {sizeof(NeuralFxStatus), 1, NFX_RESET | NFX_CONTROL | NFX_REGISTERED_MOTION};
+static NeuralFxResult nfx_result = {sizeof(NeuralFxResult), 3};
+static uint32_t nfx_taken_frame = 0, nfx_last_submitted = 0, nfx_camera = 0, nfx_epoch = 0;
+static uint64_t nfx_render_tick = 0, nfx_evaluate_tick = 0, nfx_heartbeat = 0;
+static bool nfx_enabled = false;
+static bool NeuralFxEnabled() {
+    std::lock_guard<std::mutex> lock(nfx_lock);
+    return nfx_enabled && NeuralFxNow() - nfx_heartbeat < 3000;
+}
+NFX_EXPORT int NFX_CALL NeuralFX_SetEnabled(uint32_t enabled) {
+    if (enabled > 1) return 0;
+    std::lock_guard<std::mutex> lock(nfx_lock);
+    nfx_enabled = enabled != 0; nfx_heartbeat = NeuralFxNow();
+    if (!nfx_enabled) { nfx_render_frame = {}; nfx_status.result = 0; }
     return 1;
 }
-static void __stdcall NeuralFxRenderEvent(int event_id) {
-    AcquireSRWLockExclusive(&nfx_lock);
-    const auto& slot = nfx_slots[static_cast<uint32_t>(event_id) % 16];
-    if (slot.frame == static_cast<uint32_t>(event_id)) { nfx_render_frame = slot; nfx_render_tick = GetTickCount64(); }
-    ReleaseSRWLockExclusive(&nfx_lock);
+NFX_EXPORT int NFX_CALL NeuralFX_GetCapabilities(void* output, uint32_t bytes) {
+    if (!output || bytes != sizeof(NeuralFxCapabilities)) return 0;
+    NeuralFxCapabilities caps = {sizeof(caps), 3, NFX_BUILD, NFX_RESET | NFX_CONTROL | NFX_REGISTERED_MOTION, 16384, sizeof(NeuralFxFrameV3), sizeof(NeuralFxResult), 0};
+    std::memcpy(output, &caps, sizeof(caps)); return 1;
 }
-extern "C" __declspec(dllexport) void* __cdecl NeuralFX_GetRenderEvent() { return reinterpret_cast<void*>(&NeuralFxRenderEvent); }
-extern "C" __declspec(dllexport) int __cdecl NeuralFX_GetStatus(NeuralFxStatus* output) {
+NFX_EXPORT int NFX_CALL NeuralFX_SubmitFrameV3(const void* input, uint32_t bytes) {
+    NeuralFxFrameV3 frame = {};
+    if (!NeuralFxDecode(input, bytes, frame)) return 0;
+    // This consumer has no prepare/fallback contract for camera jitter. Fail closed.
+    if (frame.jitter_x != 0 || frame.jitter_y != 0) return 0;
+    std::lock_guard<std::mutex> lock(nfx_lock);
+    if (!nfx_enabled || NeuralFxNow() - nfx_heartbeat >= 3000) return 0;
+    if (frame.camera && (frame.camera != nfx_camera || frame.epoch != nfx_epoch)) {
+        if (nfx_epoch && !NeuralFxNewer(frame.epoch, nfx_epoch)) return 0;
+        nfx_camera = frame.camera; nfx_epoch = frame.epoch;
+        nfx_last_submitted = nfx_taken_frame = 0; nfx_render_frame = {};
+        for (auto& slot : nfx_slots) slot = {};
+        nfx_result = {sizeof(NeuralFxResult), 3};
+        nfx_status.result = 0; nfx_status.reset_serial = frame.reset_serial - 1;
+    }
+    if (nfx_last_submitted && !NeuralFxNewer(frame.frame, nfx_last_submitted)) return 0;
+    nfx_last_submitted = frame.frame;
+    nfx_slots[frame.frame % 16] = frame;
+    return 1;
+}
+// Legacy entry point has no caller buffer length. It reads only its declared exact
+// layout; new callers must use the sized export. No 48-byte copy of a V1 allocation.
+NFX_EXPORT int NFX_CALL NeuralFX_SubmitFrame(const NeuralFxFrame* input) {
+    if (!input) return 0;
+    uint32_t header[2]; std::memcpy(header, input, 8);
+    if (!((header[0] == 32 && header[1] == 1) || (header[0] == 48 && header[1] == 2))) return 0;
+    return NeuralFX_SubmitFrameV3(input, header[0]);
+}
+static void NFX_EVENT NeuralFxRenderEvent(int event_id) {
+    std::lock_guard<std::mutex> lock(nfx_lock);
+    uint32_t token = static_cast<uint32_t>(event_id);
+    auto& slot = nfx_slots[token % 16];
+    if (slot.frame == token && (!slot.epoch || slot.epoch == nfx_epoch)) {
+        nfx_render_frame = slot; nfx_render_tick = NeuralFxNow(); slot = {};
+    }
+}
+NFX_EXPORT void* NFX_CALL NeuralFX_GetRenderEvent() { return reinterpret_cast<void*>(&NeuralFxRenderEvent); }
+NFX_EXPORT int NFX_CALL NeuralFX_GetStatus(NeuralFxStatus* output) {
     if (!output || output->size != sizeof(NeuralFxStatus)) return 0;
-    AcquireSRWLockShared(&nfx_lock); *output = nfx_status;
-    output->age_ms = nfx_evaluate_tick ? static_cast<uint32_t>(GetTickCount64() - nfx_evaluate_tick) : UINT32_MAX;
-    ReleaseSRWLockShared(&nfx_lock); return 1;
+    std::lock_guard<std::mutex> lock(nfx_lock); *output = nfx_status;
+    output->age_ms = nfx_evaluate_tick ? static_cast<uint32_t>(NeuralFxNow() - nfx_evaluate_tick) : UINT32_MAX;
+    return 1;
 }
-static bool NeuralFxTakeFrame(UINT width, UINT height, NeuralFxFrame& frame) {
-    AcquireSRWLockExclusive(&nfx_lock);
+NFX_EXPORT int NFX_CALL NeuralFX_GetFrameResult(void* output, uint32_t bytes) {
+    if (!output || bytes != sizeof(NeuralFxResult)) return 0;
+    std::lock_guard<std::mutex> lock(nfx_lock); std::memcpy(output, &nfx_result, bytes); return 1;
+}
+static bool NeuralFxTakeFrame(uint32_t width, uint32_t height, NeuralFxFrameV3& frame) {
+    std::lock_guard<std::mutex> lock(nfx_lock);
     frame = nfx_render_frame;
-    bool valid = frame.frame != 0 && frame.frame != nfx_taken_frame && frame.width == width && frame.height == height && GetTickCount64() - nfx_render_tick < 2000;
-    if (valid) nfx_taken_frame = frame.frame;
-    ReleaseSRWLockExclusive(&nfx_lock);
+    bool valid = nfx_enabled && frame.frame && frame.frame != nfx_taken_frame && frame.width == width && frame.height == height && NeuralFxNow() - nfx_render_tick < 250;
+    if (valid) { nfx_taken_frame = frame.frame; nfx_render_frame = {}; }
     return valid;
 }
-static bool NeuralFxResetNeeded(const NeuralFxFrame& frame) {
-    AcquireSRWLockShared(&nfx_lock); bool reset = frame.reset_serial != nfx_status.reset_serial; ReleaseSRWLockShared(&nfx_lock); return reset;
+static bool NeuralFxResetNeeded(const NeuralFxFrameV3& frame) {
+    std::lock_guard<std::mutex> lock(nfx_lock); return frame.reset_serial != nfx_status.reset_serial;
 }
-static void NeuralFxEvaluated(const NeuralFxFrame& frame, bool success, UINT width, UINT height) {
-    AcquireSRWLockExclusive(&nfx_lock);
-    nfx_status.frame = frame.frame; nfx_status.width = width; nfx_status.height = height; nfx_status.result = success ? 1 : -1;
-    nfx_evaluate_tick = GetTickCount64();
-    if (success) { nfx_status.reset_serial = frame.reset_serial; ++nfx_status.evaluations; }
-    ReleaseSRWLockExclusive(&nfx_lock);
+static void NeuralFxRecorded(const NeuralFxFrameV3& frame, int32_t error, bool submitted, uint32_t width, uint32_t height, uint32_t provider) {
+    std::lock_guard<std::mutex> lock(nfx_lock);
+    nfx_result.frame = frame.frame; nfx_result.camera = frame.camera; nfx_result.epoch = frame.epoch;
+    nfx_result.recorded = error == 0 ? frame.frame : 0; nfx_result.submitted = submitted ? frame.frame : 0;
+    nfx_result.error = error; nfx_result.motion_provider = provider;
+    nfx_result.work_width = width; nfx_result.work_height = height;
+    nfx_status.frame = frame.frame; nfx_status.width = width; nfx_status.height = height;
+    nfx_status.result = error == 0 && submitted ? 1 : -1; nfx_evaluate_tick = NeuralFxNow();
+    if (error == 0 && submitted) ++nfx_status.evaluations;
+}
+// Called only after a D3D11 event query following output blit has completed.
+static void NeuralFxCompleted(const NeuralFxFrameV3& frame) {
+    std::lock_guard<std::mutex> lock(nfx_lock);
+    if (frame.epoch != nfx_epoch || frame.camera != nfx_camera) return;
+    if (nfx_result.completed && !NeuralFxNewer(frame.frame, nfx_result.completed)) return;
+    nfx_result.completed = nfx_result.output_committed = frame.frame;
+    nfx_result.reset_serial = nfx_status.reset_serial = frame.reset_serial;
 }

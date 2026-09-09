@@ -26,20 +26,19 @@ namespace NeuralFX.Hub.Services
                 var data = new TrustData { Size = (uint)Marshal.SizeOf<TrustData>(), UiChoice = 2, UnionChoice = 1, File = pointer, ProviderFlags = 0x1000 };
                 Guid action = new("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
                 int trustResult = WinVerifyTrust(new IntPtr(-1), ref action, ref data);
-                bool authenticodeValid = trustResult == 0;
+                ValidateTrustResult(trustResult, expectedName);
 
                 using var certificate = new X509Certificate2(X509Certificate.CreateFromSignedFile(path));
                 string? signer = certificate.GetNameInfo(X509NameType.SimpleName, false);
                 if (signer != "NVIDIA Corporation") throw new CryptographicException("La biblioteca no está firmada por NVIDIA Corporation.");
 
-                // nvngx_dlss.dll requires untouched Authenticode signature.
-                // nvngx_dlssnr.dll may have modified fatbins for RTX 40 / RTX 30/20 architectures.
-                if (expectedName == "nvngx_dlss.dll" && !authenticodeValid)
-                    throw new CryptographicException("Firma Authenticode no válida para nvngx_dlss.dll.");
-
                 ValidateProductName(FileVersionInfo.GetVersionInfo(path).ProductName, expectedName);
             }
             finally { Marshal.DestroyStructure<TrustFile>(pointer); Marshal.FreeHGlobal(pointer); }
+        }
+        internal static void ValidateTrustResult(int result, string name)
+        {
+            if (result != 0) throw new CryptographicException("No se verificó Authenticode de " + name + " (WinVerifyTrust 0x" + result.ToString("X8") + "). Un certificado extraíble o un hash no sustituyen la firma íntegra.");
         }
         internal static void ValidateProductName(string? productName, string expectedName)
         {
