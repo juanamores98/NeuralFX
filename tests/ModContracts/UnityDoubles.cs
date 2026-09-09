@@ -21,12 +21,13 @@ namespace UnityEngine {
  [Flags]public enum DepthTextureMode {None=0,Depth=1,MotionVectors=4}
  public enum RenderTextureFormat {RGHalf}public enum RenderTextureReadWrite {Linear}public enum FilterMode {Point}
  public class RenderTexture:Object {public RenderTexture(int w,int h,int d,RenderTextureFormat f,RenderTextureReadWrite r){}public string name;public bool useMipMap;public FilterMode filterMode; public bool Create(){return true;}public IntPtr GetNativeTexturePtr(){throw new Exception("No pointer acquisition expected without consent");}}
- public static class SystemInfo {public static bool SupportsRenderTextureFormat(RenderTextureFormat f){return true;}}
+ public static class SystemInfo {public static Rendering.GraphicsDeviceType graphicsDeviceType=Rendering.GraphicsDeviceType.Direct3D11;public static bool SupportsRenderTextureFormat(RenderTextureFormat f){return true;}}
  public static class Mathf {public static float Max(float a,float b){return Math.Max(a,b);}public static float Abs(float a){return Math.Abs(a);}public static float Min(float a,float b){return Math.Min(a,b);}public static float Clamp(float v,float a,float b){return Max(a,Min(v,b));}}
  public static class Time {public static float timeScale=1,unscaledTime,unscaledDeltaTime;public static int frameCount;}
  public static class Debug {public static void LogWarning(object m){}public static void Log(object m){}public static void LogError(object m){}}
 }
 namespace UnityEngine.Rendering {
+ public enum GraphicsDeviceType {Direct3D11,Direct3D12}
  public enum CameraEvent {AfterEverything}public enum BuiltinRenderTextureType {MotionVectors}
  public struct RenderTargetIdentifier {public RenderTargetIdentifier(UnityEngine.RenderTexture t){}}
  public class CommandBuffer {public string name;public void Clear(){}public void Release(){}public void IssuePluginEvent(IntPtr p,int f){}public void Blit(BuiltinRenderTextureType t,RenderTargetIdentifier d){}}

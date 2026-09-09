@@ -24,6 +24,7 @@ class Program {
   for(uint caps=0;caps<128;caps++)Check(!FramePolicy.CanJitter(true,true,caps,false,true),"No jitter without preparation");
   Check(!FramePolicy.CanJitter(false,true,127,true,true),"Off jitter");Check(!FramePolicy.CanJitter(true,false,127,true,true),"No experimental consent");
   var frames=new FrameCoordinator();uint epoch=frames.Epoch;frames.Recreate();Check(FramePolicy.Newer(frames.Epoch,epoch),"Epoch monotonic");
+  SystemInfo.graphicsDeviceType=UnityEngine.Rendering.GraphicsDeviceType.Direct3D12;var unsupported=new NativeBridge();Check(!unsupported.Connect()&&!unsupported.Connected,"Foreign graphics API must never register D3D11 pointers");SystemInfo.graphicsDeviceType=UnityEngine.Rendering.GraphicsDeviceType.Direct3D11;
   Check(Marshal.SizeOf(typeof(NativeControls))==24,"Controls layout");
   var modes=new CameraModeLease();camera.depthTextureMode=DepthTextureMode.Depth;modes.Acquire(camera);modes.Release();Check(camera.depthTextureMode==DepthTextureMode.Depth,"Exact original flags restored");
   modes.Acquire(camera);camera.depthTextureMode=(DepthTextureMode)7;modes.Release();Check((int)camera.depthTextureMode==7&&modes.Conflict,"Later camera flags preserved");

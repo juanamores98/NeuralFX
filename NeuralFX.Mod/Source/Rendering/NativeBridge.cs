@@ -54,6 +54,7 @@ namespace NeuralFX.Rendering
         }
         public bool Connect()
         {
+            if (UnityEngine.SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Direct3D11) { Reason = "Esta integración requiere DirectX 11; no se registran recursos de otra API"; return false; }
             IntPtr module = NativeInterop.GetModuleHandle("dlss5-feed.addon64");
             if (module == IntPtr.Zero) { Reason = "Puente sin cargar"; return false; }
             var probe = (CapabilitiesDelegate)Resolve(module, "NeuralFX_GetCapabilities", typeof(CapabilitiesDelegate));
