@@ -46,5 +46,10 @@ int main() {
     assert(!NeuralFX_SetControls(&controls,24)); controls.sharpness=0; assert(NeuralFX_SetControls(&controls,24));
     nfx_controls_tick -= 6000; NeuralFxControls expired = {}; assert(NeuralFX_GetControls(&expired,24) == -2);
     assert(expired.revision == controls.revision); controls.revision=4; assert(NeuralFX_SetControls(&controls,24));
+    // A stopped backend must not look healthy merely because telemetry got old or a camera resized.
+    NeuralFX_SetEnabled(1);NeuralFxRecorded(f,-99,false,1920,1080,1);
+    f.frame=20;f.epoch=3;assert(NeuralFX_SubmitFrameV3(&f,64));
+    NeuralFxResult result={};assert(NeuralFX_GetFrameResult(&result,80));assert(result.error==-99&&result.epoch==3);
+    NeuralFxRecorded(f,0,true,1920,1080,1);assert(NeuralFX_GetFrameResult(&result,80));assert(result.error==0);
     std::puts("Bridge contract passed: exact V1 allocation, V2/V3, malformed buffers, finite values, replay, epochs, completion, safe jitter and Off.");
 }

@@ -20,6 +20,7 @@ static uint64_t NeuralFxNow() {
 static NeuralFxFrameV3 nfx_slots[16] = {}, nfx_render_frame = {};
 static NeuralFxStatus nfx_status = {sizeof(NeuralFxStatus), 1, NFX_RESET | NFX_CONTROL | NFX_REGISTERED_MOTION};
 static NeuralFxResult nfx_result = {sizeof(NeuralFxResult), 3};
+static int32_t nfx_last_error = 0;
 static NeuralFxFrameV3 nfx_abandoned[16] = {};
 // Only frames whose render event has executed may enter this retirement queue.
 static void NeuralFxAbandonLocked(const NeuralFxFrameV3& frame) {
@@ -84,6 +85,7 @@ NFX_EXPORT int NFX_CALL NeuralFX_SubmitFrameV3(const void* input, uint32_t bytes
         nfx_last_submitted = nfx_taken_frame = 0; NeuralFxAbandonLocked(nfx_render_frame); nfx_render_frame = {};
         // Keep submitted slots until their queued render event executes.
         nfx_result = {sizeof(NeuralFxResult), 3};
+        nfx_result.camera = frame.camera; nfx_result.epoch = frame.epoch; nfx_result.error = nfx_last_error;
         nfx_status.result = 0; nfx_status.reset_serial = frame.reset_serial - 1;
     }
     if (nfx_last_submitted && !NeuralFxNewer(frame.frame, nfx_last_submitted)) return 0;
@@ -137,7 +139,7 @@ static void NeuralFxRecorded(const NeuralFxFrameV3& frame, int32_t error, bool s
     if (frame.epoch != nfx_epoch || frame.camera != nfx_camera) return;
     nfx_result.frame = frame.frame; nfx_result.camera = frame.camera; nfx_result.epoch = frame.epoch;
     nfx_result.recorded = error == 0 ? frame.frame : 0; nfx_result.submitted = submitted ? frame.frame : 0;
-    nfx_result.error = error; nfx_result.motion_provider = provider;
+    nfx_last_error = error; nfx_result.error = error; nfx_result.motion_provider = provider;
     nfx_result.work_width = width; nfx_result.work_height = height;
     nfx_status.frame = frame.frame; nfx_status.width = width; nfx_status.height = height;
     nfx_status.result = error == 0 && submitted ? 1 : -1; nfx_evaluate_tick = NeuralFxNow();

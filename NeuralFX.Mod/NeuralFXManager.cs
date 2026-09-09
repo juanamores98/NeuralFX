@@ -103,7 +103,8 @@ namespace NeuralFX
             bool recent = status.Frame > 0 && status.AgeMs < 2000;
             if (recent && status.Result == 1 && ModSettings.PipelineEnabled) flags |= RuntimeFlags.EvaluationSucceeded;
             if (_temporal != null) _resetSerial = _temporal.ResetSerial;
-            bool current = _temporal != null && result.Epoch == _temporal.Epoch && recent && ModSettings.PipelineEnabled;
+            bool sameHistory = _temporal != null && result.Epoch == _temporal.Epoch && ModSettings.PipelineEnabled;
+            bool current = sameHistory && recent;
             if (current && result.MotionProvider == 2) flags |= RuntimeFlags.NativeMotion;
             if (current && result.OutputCommitted > 0) flags |= RuntimeFlags.OutputCommitted;
             if (current && result.NrConfirmed != 0) flags |= RuntimeFlags.NrConfirmed;
@@ -122,7 +123,7 @@ namespace NeuralFX
                 WorkWidth = status.Width, WorkHeight = status.Height, Evaluations = status.Evaluations,
                 BridgeBuild = _bridge.Capabilities.Build, DeviceEpoch = result.Epoch, CameraId = result.Camera, RecordedFrame = result.Recorded, SubmittedFrame = result.Submitted,
                 CompletedFrame = result.Completed, OutputFrame = result.OutputCommitted, MotionProvider = current ? result.MotionProvider : 0,
-                AdapterLow = result.AdapterLow, AdapterHigh = result.AdapterHigh, BackendError = current ? result.Error : 0,
+                AdapterLow = result.AdapterLow, AdapterHigh = result.AdapterHigh, BackendError = sameHistory ? result.Error : 0,
                 CommandResult = _commandResult, CommandReason = _commandReason, ControlsRevision=controls.Revision, ControlsResult=controlResult, RequestedWork=controls.WorkPercent, RequestedSharpness=controls.Sharpness
             };
             if (_channel != null) _channel.Publish(CurrentFrame);
