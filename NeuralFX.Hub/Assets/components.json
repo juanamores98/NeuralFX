@@ -40,7 +40,7 @@
   {
     "Id": "renodx_dlss5",
     "DisplayName": "RenoDX DLSS5 3.3.4",
-    "Description": "Versión fijada tras probar NR a 4K. Las versiones 4.55/4.70 fallaron en la validación.",
+    "Description": "Versión del control histórico a 4K. No acredita la combinación ABI 3 actual; 4.55/4.70 fallaron en aquella validación.",
     "Category": 1,
     "TargetRelativePath": "renodx-dlss5.addon64",
     "SourceType": "PublicDownload",
@@ -159,8 +159,8 @@
       "nvngx_dlss.dll": "3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983"
     },
     "Author": "NVIDIA",
-    "Distributor": "User import (community mirror listed for historical provenance only)",
-    "LicenseStatus": "User must obtain an authorized runtime; redistribution not established here",
+    "Distributor": "Importación del usuario; espejo comunitario indicado como procedencia histórica",
+    "LicenseStatus": "Obtener runtime autorizado; redistribución no acreditada aquí",
     "TrustPolicy": "PinnedFileHashAndNvidiaAuthenticode"
   },
   {
@@ -183,8 +183,8 @@
       "nvngx_dlssnr.dll": "e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e"
     },
     "Author": "NVIDIA",
-    "Distributor": "User import (community mirror listed for historical provenance only)",
-    "LicenseStatus": "User must obtain an authorized runtime; redistribution not established here",
+    "Distributor": "Importación del usuario; espejo comunitario indicado como procedencia histórica",
+    "LicenseStatus": "Obtener runtime autorizado; redistribución no acreditada aquí",
     "TrustPolicy": "PinnedFileHashAndNvidiaAuthenticode"
   },
   {

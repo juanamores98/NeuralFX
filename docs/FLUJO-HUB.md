@@ -1,6 +1,6 @@
 # Qué está instalado y qué hará el Hub
 
-El Hub 2.0.2 abre en **Instalación** y presenta tres pasos:
+El Hub 2.1.0 separa **Inicio**, **Instalación** y **Diagnóstico**. La instalación presenta tres pasos:
 
 1. **Preparar componentes:** descargar o importar copias verificadas. No modifica el juego. Los recursos incluidos en el Hub también cuentan como disponibles.
 2. **Instalar en CS1:** copiar y registrar los archivos del pipeline. La acción disponible indica si es una primera instalación, actualización antigua, reparación o aplicación de un preset.

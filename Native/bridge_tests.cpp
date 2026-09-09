@@ -44,5 +44,7 @@ int main() {
     nfx_controls_applied=1; nfx_controls_result=1; assert(NeuralFX_SetControls(&controls,24));
     nfx_controls_applied=2; nfx_controls_result=1; controls.revision=3; controls.mask=2; controls.sharpness=std::numeric_limits<float>::quiet_NaN();
     assert(!NeuralFX_SetControls(&controls,24)); controls.sharpness=0; assert(NeuralFX_SetControls(&controls,24));
+    nfx_controls_tick -= 6000; NeuralFxControls expired = {}; assert(NeuralFX_GetControls(&expired,24) == -2);
+    assert(expired.revision == controls.revision); controls.revision=4; assert(NeuralFX_SetControls(&controls,24));
     std::puts("Bridge contract passed: exact V1 allocation, V2/V3, malformed buffers, finite values, replay, epochs, completion, safe jitter and Off.");
 }

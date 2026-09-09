@@ -11,7 +11,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Managed build failed.' }
     & dotnet test NeuralFX.Tests/NeuralFX.Tests.csproj -c Release @managedArgs --nologo -v:q
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
-    $package = Join-Path $taskRoot ('artifacts/releases/NeuralFX-2.0.2-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
+    $package = Join-Path $taskRoot ('artifacts/releases/NeuralFX-2.1.0-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
     New-Item -ItemType Directory -Path $package -Force | Out-Null
     & dotnet publish NeuralFX.Hub/NeuralFX.Hub.csproj -c Release -r win-x64 --self-contained false @managedArgs -o (Join-Path $package 'Hub') --nologo -v:q
     if ($LASTEXITCODE -ne 0) { throw 'Hub publish failed.' }
@@ -19,6 +19,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Package installer publish failed.' }
     Copy-Item -LiteralPath 'NeuralFX.Mod/bin/Release/net35/NeuralFX.dll' -Destination $package
     foreach ($file in @('README.md','LICENSE','NOTICE','Iniciar-NeuralFX-Hub.bat','Install-NeuralFX.ps1')) { Copy-Item -LiteralPath $file -Destination $package }
+    Copy-Item -LiteralPath 'Native/out/capabilities.json' -Destination $package
     Copy-Item -LiteralPath 'docs' -Destination (Join-Path $package 'docs') -Recurse
     Copy-Item -LiteralPath 'licenses' -Destination (Join-Path $package 'licenses') -Recurse
     $manifest = [ordered]@{}

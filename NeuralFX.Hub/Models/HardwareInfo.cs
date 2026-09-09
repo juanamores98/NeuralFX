@@ -6,9 +6,9 @@ namespace NeuralFX.Hub.Models
     {
         Unknown,
         Unsupported,
-        AmpereTuring,   // RTX 20xx / 30xx (SM 75 / 86) -> dlssnr-310.8.SF-v2
-        AdaLovelace,    // RTX 40xx (SM 89) -> dlssnr-310.8.0-RTX40
-        Blackwell       // RTX 50xx (SM 120) -> dlssnr-310.8.0
+        AmpereTuring,   // Inventory only; does not select a runtime variant
+        AdaLovelace,    // Inventory only
+        Blackwell       // Inventory only
     }
 
     public enum FeatureSupport { Unknown, Supported, Unsupported }

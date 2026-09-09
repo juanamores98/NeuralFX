@@ -33,6 +33,7 @@ static bool nfx_enabled = false;
 static NeuralFxControls nfx_controls = {24,3,0,0,100,0.3f};
 static uint32_t nfx_controls_applied = 0;
 static int32_t nfx_controls_result = 0;
+static uint64_t nfx_controls_tick = 0;
 static int32_t nfx_work_override = 0;
 static float nfx_sharp_override = -1;
 static bool NeuralFxEnabled() {
@@ -49,12 +50,14 @@ NFX_EXPORT int NFX_CALL NeuralFX_SetControls(const NeuralFxControls* controls, u
     if (nfx_controls.revision && !NeuralFxNewer(c.revision, nfx_controls.revision)) return 0;
     // Do not silently replace an accepted command that the render thread has not applied.
     if (nfx_controls_result == 0 && nfx_controls.revision != nfx_controls_applied) return 0;
-    nfx_controls = c; nfx_controls_result = 0; return 1;
+    nfx_controls = c; nfx_controls_result = 0; nfx_controls_tick = NeuralFxNow(); return 1;
 }
 NFX_EXPORT int NFX_CALL NeuralFX_GetControls(NeuralFxControls* controls, uint32_t bytes) {
     if (!controls || bytes != sizeof(NeuralFxControls)) return 0;
-    std::lock_guard<std::mutex> lock(nfx_lock); *controls = nfx_controls;
-    return nfx_controls_result; // 0 pending, 1 applied to render settings, -1 unsupported uniform
+    std::lock_guard<std::mutex> lock(nfx_lock);
+    if (nfx_controls_result == 0 && nfx_controls.revision != nfx_controls_applied && NeuralFxNow() - nfx_controls_tick > 5000) nfx_controls_result = -2;
+    *controls = nfx_controls;
+    return nfx_controls_result; // 0 pending, 1 render settings applied, -1 unsupported uniform, -2 expired
 }
 NFX_EXPORT int NFX_CALL NeuralFX_SetEnabled(uint32_t enabled) {
     if (enabled > 1) return 0;
@@ -131,6 +134,7 @@ static bool NeuralFxResetNeeded(const NeuralFxFrameV3& frame) {
 }
 static void NeuralFxRecorded(const NeuralFxFrameV3& frame, int32_t error, bool submitted, uint32_t width, uint32_t height, uint32_t provider) {
     std::lock_guard<std::mutex> lock(nfx_lock);
+    if (frame.epoch != nfx_epoch || frame.camera != nfx_camera) return;
     nfx_result.frame = frame.frame; nfx_result.camera = frame.camera; nfx_result.epoch = frame.epoch;
     nfx_result.recorded = error == 0 ? frame.frame : 0; nfx_result.submitted = submitted ? frame.frame : 0;
     nfx_result.error = error; nfx_result.motion_provider = provider;

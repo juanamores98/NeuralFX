@@ -68,6 +68,18 @@ public sealed class DiagnosticsAndRollbackTests : IDisposable
         Assert.False(Directory.Exists(_dependencies.CacheDirectory)); // discovery has no import side effects
     }
     [Fact]
+    public async Task RollbackRejectsChangesSinceTheReviewedSnapshot()
+    {
+        var item=await Payload();
+        Assert.True(await new InstallationEngineService(_dependencies,()=>false).InstallAsync(_game,new(){item}));
+        string path=Path.Combine(_game,item.TargetRelativePath);
+        var preview=new InstallationPreview();preview.ExpectedBefore[item.TargetRelativePath]=DependencyManagerService.CalculateSha256(path);
+        File.WriteAllText(path,"later external edit");
+        Assert.False(await new RollbackService(()=>false).RollbackAsync(_game,preview:preview));
+        Assert.Equal("later external edit",File.ReadAllText(path));
+        Assert.True(File.Exists(Path.Combine(_game,"NeuralFX_Manifest.json")));
+    }
+    [Fact]
     public async Task ReinstallThenRollbackRestoresEveryOriginalAndPreservesUnrelatedFiles()
     {
         Directory.CreateDirectory(Path.Combine(_game, "reshade-shaders", "Shaders"));
@@ -209,14 +221,17 @@ public sealed class DiagnosticsAndRollbackTests : IDisposable
         BinaryIdentity.ValidateProductName("NVIDIA DLSSNR", "nvngx_dlssnr.dll");
         BinaryIdentity.ValidateProductName("NVIDIA Deep Learning SuperSampling", "nvngx_dlss.dll");
     }
-    [Fact]
-    public void StartupConfigurationEnablesFastStartupAndCachedPerformance()
+    [Theory]
+    [InlineData("")]
+    [InlineData("0")]
+    [InlineData("1")]
+    public void StartupConfigurationPreservesUserPerformanceMode(string performanceMode)
     {
-        File.WriteAllText(Path.Combine(_game, "ReShade.ini"), "[GENERAL]\nStartupPresetPath=old.ini\nOther=42\n");
+        File.WriteAllText(Path.Combine(_game, "ReShade.ini"), "[GENERAL]\nStartupPresetPath=old.ini\nOther=42\n" + (performanceMode.Length > 0 ? "PerformanceMode="+performanceMode+"\n" : ""));
         var files = PipelineConfiguration.Create(_game, PipelinePreset.Native);
         string ini = System.Text.Encoding.UTF8.GetString(files["ReShade.ini"]);
         Assert.Equal("0", Ini.Get(ini, "GENERAL", "NoReloadOnInit"));
-        Assert.Equal("1", Ini.Get(ini, "GENERAL", "PerformanceMode"));
+        Assert.Equal(performanceMode, Ini.Get(ini, "GENERAL", "PerformanceMode"));
         Assert.Equal("1", Ini.Get(ini, "GENERAL", "NoDebugInfo"));
         Assert.Equal("0", Ini.Get(ini, "GENERAL", "NoEffectCache"));
         Assert.Equal("2", Ini.Get(ini, "DEPTH", "DrawStatsHeuristic"));

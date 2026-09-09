@@ -111,7 +111,7 @@ namespace NeuralFX
             if (!_commandIsControl && _commandResult == CommandResult.Accepted && current && (result.ResetSerial == _commandReset || FramePolicy.Newer(result.ResetSerial,_commandReset))) _commandResult = CommandResult.Applied;
             var controls = new NativeControls(); int controlResult = _bridge.ReadControls(ref controls);
             if (_controlRevision != 0 && controls.Revision == _controlRevision && controlResult != 0) {
-                ControlMessage = controlResult == 1 ? "Ajuste aplicado; comprueba dimensiones efectivas" : "Ajuste rechazado: el uniform CAS no está disponible";
+                ControlMessage = controlResult == 1 ? "Ajuste aplicado; comprueba dimensiones efectivas" : controlResult == -2 ? "Ajuste caducado sin consumidor; vuelve a intentarlo con una ciudad activa" : "Ajuste rechazado: desactiva Performance Mode en ReShade para editar CAS";
                 if (_commandIsControl && _commandResult == CommandResult.Accepted) _commandResult = controlResult == 1 ? CommandResult.Applied : CommandResult.Rejected;
             }
             CurrentFrame = new TelemetryFrame {

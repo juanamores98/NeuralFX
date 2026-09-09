@@ -61,6 +61,10 @@ namespace NeuralFX.Hub.Models
         public string Distributor { get; set; } = "";
         public string LicenseStatus { get; set; } = "";
         public string TrustPolicy { get; set; } = "PinnedHash";
+        public string ProvenanceDescription => "Versión: " + Version + "\nAutor: " + (Author.Length > 0 ? Author : "Ver fuente indicada") +
+            "\nDistribuidor: " + (Distributor.Length > 0 ? Distributor : OfficialWebUrl) +
+            "\nCondiciones: " + (LicenseStatus.Length > 0 ? LicenseStatus : "Consultar licencia de la fuente; no se certifican permisos por tener un hash") +
+            "\nVerificación: " + (TrustPolicy == "PinnedFileHashAndNvidiaAuthenticode" ? "SHA-256 del archivo y firma Authenticode NVIDIA íntegra" : "Hash fijado del componente");
         // Exact archive suffix -> game-relative destination, including companion resources.
         public Dictionary<string, string> PackageFiles { get; set; } = new();
         public string? ReleaseRepository { get; set; }

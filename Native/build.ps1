@@ -115,7 +115,7 @@ static void NeuralFxBeginEffects(reshade::api::effect_runtime* rt, reshade::api:
     const bool active = NeuralFxEnabled();
     NeuralFxControls controls;
     bool controls_pending;
-    { std::lock_guard<std::mutex> lock(nfx_lock); controls = nfx_controls; controls_pending = controls.revision != nfx_controls_applied && nfx_controls_result == 0; }
+    { int result = NeuralFX_GetControls(&controls,sizeof(controls)); controls_pending = controls.revision != 0 && result == 0; }
     if (controls_pending && active && rt == g.runtime) {
         auto sharp = rt->find_uniform_variable("NeuralFX_CAS.fx", "Sharpening");
         if ((controls.mask & 2) && controls.sharpness > 0 && !sharp.handle) {
@@ -130,6 +130,10 @@ static void NeuralFxBeginEffects(reshade::api::effect_runtime* rt, reshade::api:
             if ((controls.mask & 2) && sharp.handle) rt->set_uniform_value_float(sharp, &controls.sharpness, 1);
             std::lock_guard<std::mutex> lock(nfx_lock); nfx_controls_applied = controls.revision; nfx_controls_result = 1;
         }
+    }
+    if (active && rt == g.runtime && nfx_sharp_override > 0) {
+        auto sharp = rt->find_uniform_variable("NeuralFX_CAS.fx", "Sharpening");
+        if (sharp.handle) rt->set_uniform_value_float(sharp, &nfx_sharp_override, 1);
     }
     static bool previous = false;
     if (active != previous) { g.need_reset = true; previous = active; }

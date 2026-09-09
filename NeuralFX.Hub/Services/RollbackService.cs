@@ -9,13 +9,14 @@ namespace NeuralFX.Hub.Services
     {
         private readonly Func<bool> _isGameRunning;
         public RollbackService(Func<bool>? isGameRunning = null) => _isGameRunning = isGameRunning ?? HardwareDiagnosticsService.IsCitiesSkylinesRunning;
-        public Task<bool> RollbackAsync(string gameDirectory, Action<string>? logAction = null, bool enforceProcessClosed = true) => Task.Run(() =>
+        public Task<bool> RollbackAsync(string gameDirectory, Action<string>? logAction = null, bool enforceProcessClosed = true, InstallationPreview? preview = null) => Task.Run(() =>
         {
             try
             {
                 if (enforceProcessClosed && _isGameRunning()) throw new IOException("Cierra Cities: Skylines antes de desinstalar.");
                 using var lease = new InstallationLease(gameDirectory);
                 FileTransaction.Recover(gameDirectory);
+                preview?.ValidateUnchanged(gameDirectory);
                 if (!File.Exists(ManagedPaths.Resolve(gameDirectory, "NeuralFX_Manifest.json")))
                 { logAction?.Invoke("Sin manifiesto de NeuralFX: no se elimina ningún archivo."); return true; }
                 var manifest = ManifestStore.Read(gameDirectory);
@@ -37,6 +38,7 @@ namespace NeuralFX.Hub.Services
                 if (manifest.PreviousManifestBackup != null) transaction.Write(manifest.PreviousManifestBackup, null);
                 transaction.Write("NeuralFX_Manifest.json", previousManifest);
                 if (enforceProcessClosed && _isGameRunning()) throw new IOException("El juego se abrió durante la preparación.");
+                preview?.ValidateUnchanged(gameDirectory);
                 transaction.Commit();
                 // Only remove directories this installation created, and only if empty.
                 foreach (string relative in manifest.InstalledDirectories.Concat(new[] { ".neuralfx-backups" }).OrderByDescending(x => x.Length))

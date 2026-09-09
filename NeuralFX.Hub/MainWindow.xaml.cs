@@ -172,7 +172,7 @@ namespace NeuralFX.Hub
                 TxtGameStatus.Text = "JUEGO NO LOCALIZADO";
                 PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(192, 57, 43));
                 TxtPipelineStatusTitle.Text = "Cities.exe no encontrado";
-                TxtPipelineStatusSubtitle.Text = "Selecciona la carpeta o el ejecutable Cities.exe en la pestaña 'Entorno y Diagnóstico'.";
+                TxtPipelineStatusSubtitle.Text = "Selecciona la carpeta o el ejecutable Cities.exe en la pestaña 'Diagnóstico'.";
                 BtnInstall.IsEnabled = false;
                 BtnUninstall.IsEnabled = false;
                 return;
@@ -185,14 +185,7 @@ namespace NeuralFX.Hub
 
             if (isVerified)
             {
-                // Si el pipeline está verificado, asegurar que NeuralFX.dll esté en Addons/Mods para Skyve y el juego
-                string modDllPath = Path.Combine(ModDirectory, "NeuralFX.dll");
-                if (!File.Exists(modDllPath))
-                {
-                    EnsureModDeployed();
-                }
-
-                TxtGameStatus.Text = "INSTALADO Y ACTIVO";
+                TxtGameStatus.Text = "ARCHIVOS VERIFICADOS";
                 PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(39, 174, 96));
                 TxtPipelineStatusTitle.Text = "Archivos instalados y verificados";
                 TxtPipelineStatusSubtitle.Text = "Instalación verificada. La ejecución del portador y de NR se comprueba por separado al cargar una ciudad.";
@@ -229,8 +222,8 @@ namespace NeuralFX.Hub
 
             TxtIntegrity.Text = _report == null ? "Elige la carpeta del juego y vuelve a analizar." :
                 (!_report.Managed ? "No hay una instalación registrada activa. El juego se encuentra limpio o con archivos sin registrar." :
-                    _report.Details.Length == 0 ? "Todos los archivos registrados coinciden exactamente con sus firmas de seguridad." : string.Join("\n", _report.Details)) +
-                "\n\nLa integridad de archivos confirma que los binarios están listos para la inyección D3D11.";
+                    _report.Details.Length == 0 ? "Todos los archivos registrados coinciden con sus hashes guardados." : string.Join("\n", _report.Details)) +
+                "\n\nLos hashes verifican integridad de archivos. La compatibilidad, la carga y NR se comprueban por separado.";
         }
 
         private static int FindGameProcess(string expectedPath)
@@ -259,7 +252,6 @@ namespace NeuralFX.Hub
             if (_lastFrame.UtcTicks == frame.UtcTicks) return;
             _lastFrame = frame;
             TxtTelemetry.Text = TelemetryStatus.Describe(frame);
-            bool evaluated = (frame.Flags & RuntimeFlags.EvaluationSucceeded) != 0;
             TxtSessionSummary.Text = SessionViewState.Summary(frame);
             TxtSessionHint.Text = "NGX, NR y salida incorporada son estados distintos. El tiempo mostrado es el intervalo del juego, no el coste GPU de NR.";
         }
@@ -366,16 +358,14 @@ namespace NeuralFX.Hub
                 bool success = await _installEngine.InstallAsync(root, _dependencies, LogHub, preset: preset, preview: preview);
                 if (!success) return new(false, "La instalación no se completó", _operationLastMessage);
 
-                // Asegurar que NeuralFX.dll esté desplegado en la carpeta de Mods
-                EnsureModDeployed();
-
                 var verified = await Task.Run(() => IntegrityMonitor.Scan(root, _dependencies.SelectMany(x => _dependencyManager.GetPackageFiles(x).Values)));
+                if (!verified.Valid || verified.NeedsRepair) return new(false,"Archivos aplicados; verificación incompleta",string.Join("\n",verified.Details));
                 _preferences.Preset = preset;
                 try { _preferences.Save(); } catch (Exception ex) { LogHub("No se pudo recordar el preset: " + ex.Message); }
                 _integrity.Invalidate();
 
                 string presetName = (PresetSelector.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? preset.ToString();
-                return new(true, "Pipeline instalado y verificado", "Componentes aplicados correctamente con perfil: " + presetName + ".\nReinicia Cities: Skylines y valida el resultado en una ciudad.");
+                return new(true, "Pipeline instalado y verificado", "Componentes aplicados correctamente con perfil: " + presetName + ".\nActualiza también el mod con Install-NeuralFX.ps1 del paquete, reinicia Cities: Skylines y valida una ciudad.");
             });
         }
 
@@ -386,103 +376,36 @@ namespace NeuralFX.Hub
             var cancel = new Button { Content = "Cancelar", IsCancel = true, Margin = new Thickness(12) };
             var actions = new StackPanel { Orientation = Orientation.Horizontal }; actions.Children.Add(apply); actions.Children.Add(cancel);
             var panel = new DockPanel(); DockPanel.SetDock(actions,Dock.Bottom); panel.Children.Add(actions); panel.Children.Add(text);
-            var window = new Window { Owner=this,Title="Revisar cambios de instalación",Width=Math.Min(760,SystemParameters.WorkArea.Width),Height=Math.Min(620,SystemParameters.WorkArea.Height),Content=panel,WindowStartupLocation=WindowStartupLocation.CenterOwner };
+            var window = new Window { Owner=this,Title="Revisar cambios de archivos",Width=Math.Min(760,SystemParameters.WorkArea.Width),Height=Math.Min(620,SystemParameters.WorkArea.Height),Content=panel,WindowStartupLocation=WindowStartupLocation.CenterOwner };
             apply.Click += (_,_)=>window.DialogResult=true;
             return window.ShowDialog()==true;
         }
-        private void EnsureModDeployed()
+        private async void BtnRestore_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                string targetDir = ModDirectory;
-                if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
-                string targetDll = Path.Combine(targetDir, "NeuralFX.dll");
-
-                // Prioridad 1: Recurso embebido en el propio ensamblado del Hub
-                var asm = System.Reflection.Assembly.GetExecutingAssembly();
-                using (var stream = asm.GetManifestResourceStream("NeuralFX.Mod.Assembly"))
-                {
-                    if (stream != null)
-                    {
-                        using (var file = File.Create(targetDll))
-                        {
-                            stream.CopyTo(file);
-                        }
-                        LogHub("Desplegado mod integrado (recurso embebido): " + targetDll);
-                        return;
-                    }
+            if (GameDirectory is not string root) return;
+            await PerformAsync("Preparando restauración", async () => {
+                var report = await Task.Run(() => IntegrityMonitor.Scan(root));
+                if (report.Restoration == null) return new(false,"Restauración no disponible",string.Join("\n",report.Details));
+                var manifest = ManifestStore.Read(root);
+                var snapshot = new InstallationPreview();
+                foreach (string relative in manifest.InstalledFiles.Concat(manifest.BackedUpFiles.Values).Concat(new[] {"NeuralFX_Manifest.json"})) {
+                    string path=ManagedPaths.Resolve(root,relative);snapshot.ExpectedBefore[relative]=File.Exists(path)?DependencyManagerService.CalculateSha256(path):null;
                 }
-
-                // Prioridad 2: Buscar en rutas relativas locales o compilación
-                string[] searchLocations =
-                {
-                    Path.Combine(AppContext.BaseDirectory, "NeuralFX.dll"),
-                    Path.Combine(AppContext.BaseDirectory, "..", "NeuralFX.dll"),
-                    Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "NeuralFX.Mod", "bin", "Release", "net35", "NeuralFX.dll"),
-                    Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "NeuralFX.Mod", "bin", "Debug", "net35", "NeuralFX.dll")
-                };
-
-                foreach (string candidate in searchLocations)
-                {
-                    if (File.Exists(candidate))
-                    {
-                        File.Copy(candidate, targetDll, true);
-                        LogHub("Desplegado mod gestionado: " + targetDll);
-                        return;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHub("Aviso al verificar mod en Addons/Mods: " + ex.Message);
-            }
+                if (!ReviewInstallation(report.Restoration.Details)) return new(null,"Restauración cancelada","No se aplicaron cambios.");
+                bool restored=await new RollbackService().RollbackAsync(root,LogHub,preview:snapshot);
+                _integrity.Invalidate();return new(restored,restored?"Estado anterior restaurado":"Restauración incompleta",_operationLastMessage);
+            });
         }
-
         private async void BtnUninstall_Click(object sender, RoutedEventArgs e)
         {
             if (GameDirectory is not string root) return;
-            if (_hardwareInfo.IsGameRunning)
-            {
-                MessageBox.Show("Por favor cierra Cities: Skylines antes de desinstalar.", "Juego en ejecución", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var confirm = MessageBox.Show(
-                "¿Deseas desinstalar completamente NeuralFX y ReShade de Cities: Skylines?\n\n" +
-                "• Se eliminarán todos los archivos inyectados: dxgi.dll, addons, DLLs de DLSS, shaders y configuraciones.\n" +
-                "• Se retirará el mod NeuralFX de la carpeta Addons/Mods.\n" +
-                "• Cities: Skylines volverá a su estado 100% original (Vanilla).\n\n" +
-                "Cualquier archivo de usuario previo se respaldará silenciosamente fuera del juego.\n\n" +
-                "¿Continuar con la desinstalación completa?",
-                "Desinstalación 100% Zero-Trace · NeuralFX",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
-            if (confirm != MessageBoxResult.Yes) return;
-
-            await PerformAsync("Desinstalando NeuralFX y ReShade del juego", async () =>
-            {
+            await PerformAsync("Preparando desinstalación", async () => {
                 await _uninstaller.RecoverAsync(root);
                 var plan = await Task.Run(() => UninstallService.Inspect(root));
-                var result = await _uninstaller.UninstallAsync(plan, LogHub);
-
-                // Retirar completamente la carpeta del mod en Addons/Mods para que Skyve y el juego queden limpios
-                if (Directory.Exists(ModDirectory))
-                {
-                    try
-                    {
-                        Directory.Delete(ModDirectory, true);
-                        LogHub("Retirada carpeta completa del mod: " + ModDirectory);
-                    }
-                    catch (Exception ex)
-                    {
-                        LogHub("Aviso al retirar carpeta del mod: " + ex.Message);
-                    }
-                }
-
+                if (!ReviewInstallation(plan.Details)) return new(null,"Desinstalación cancelada","No se aplicaron cambios.");
+                var result=await _uninstaller.UninstallAsync(plan,LogHub);
                 _integrity.Invalidate();
-                return new(result.Success, result.Success ? "Juego 100% Limpio (Vanilla)" : "Desinstalación incompleta",
-                    result.Success ? "Se eliminaron todos los componentes inyectados de Cities: Skylines. El juego ha quedado en estado vanilla." : result.Message);
+                return new(result.Success,result.Success?"Componentes gráficos retirados":"Desinstalación incompleta",result.Message);
             });
         }
 

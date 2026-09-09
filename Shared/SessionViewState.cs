@@ -14,6 +14,19 @@ namespace NeuralFX.Protocol
             if (Has(frame, RuntimeFlags.NrConfirmed)) return Has(frame, RuntimeFlags.UiIsolated) ? "NR confirmado; UI protegida" : "NR confirmado; UI no aislada";
             return Has(frame, RuntimeFlags.EvaluationSucceeded) ? "Portador NGX operativo; NR sin confirmar" : "Esperando evaluación del portador NGX";
         }
+        public static string CommandStatus(TelemetryFrame frame)
+        {
+            if (frame.CommandResult == CommandResult.Applied) return "Aplicado";
+            if (frame.CommandResult == CommandResult.Accepted) return "Aceptado; esperando al render";
+            if (frame.CommandResult != CommandResult.Rejected) return "Sin comando";
+            switch (frame.CommandReason) {
+                case 1: return "Caducado: vuelve a enviarlo";
+                case 2: return "No disponible: carga una ciudad y revisa las opciones experimentales";
+                case 3: return "No se confirmó: revisa puente y guardado de preferencias";
+                case 4: return "Rechazado: hay un ajuste pendiente o falta capacidad del puente";
+                default: return "Rechazado por el render: revisa el estado del ajuste";
+            }
+        }
         public static string Details(TelemetryFrame frame)
         {
             string motion = frame.MotionProvider == 2 ? "Unity experimental (cobertura sin validar)" : frame.MotionProvider == 1 ? "Óptico" : "Sin entrada confirmada";
@@ -22,7 +35,7 @@ namespace NeuralFX.Protocol
                 "\nFrame grabado / enviado / completado / incorporado: " + frame.RecordedFrame + " / " + frame.SubmittedFrame + " / " + frame.CompletedFrame + " / " + frame.OutputFrame +
                 "\nReset solicitado / completado: " + frame.CameraCuts + " / " + frame.ResetCount +
                 "\nTiempo GPU NR: no medido. SR interno: no disponible." +
-                (frame.ControlsRevision != 0 ? "\nAjuste #" + frame.ControlsRevision + ": " + (frame.ControlsResult == 1 ? "aplicado a configuración del render" : frame.ControlsResult == -1 ? "rechazado" : "pendiente") : "");
+                (frame.ControlsRevision != 0 ? "\nAjuste #" + frame.ControlsRevision + ": " + (frame.ControlsResult == 1 ? "aplicado a configuración del render" : frame.ControlsResult < 0 ? "rechazado/caducado" : "pendiente") : "");
         }
     }
 }
