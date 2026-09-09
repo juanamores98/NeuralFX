@@ -111,8 +111,8 @@ $source = Replace-Once $source '    if (!g_cfg.enabled || g.disabled || g_cfg.mo
 $source = Replace-Once $source 'static void DrawOverlay(reshade::api::effect_runtime *rt)' @'
 // Apply only the techniques owned by NeuralFX. Foreign techniques keep their state.
 static void NeuralFxBeginEffects(reshade::api::effect_runtime* rt, reshade::api::command_list*, reshade::api::resource_view, reshade::api::resource_view) {
-    NeuralFxPollOutputs();
-    const bool active = NeuralFxEnabled();
+    if (rt == g.runtime) NeuralFxPollOutputs();
+    const bool active = NeuralFxEnabled() && rt->get_device()->get_api() == reshade::api::device_api::d3d11;
     NeuralFxControls controls;
     bool controls_pending;
     { int result = NeuralFX_GetControls(&controls,sizeof(controls)); controls_pending = controls.revision != 0 && result == 0; }
@@ -136,15 +136,15 @@ static void NeuralFxBeginEffects(reshade::api::effect_runtime* rt, reshade::api:
         if (sharp.handle) rt->set_uniform_value_float(sharp, &nfx_sharp_override, 1);
     }
     static bool previous = false;
-    if (active != previous) { g.need_reset = true; previous = active; }
+    if (rt == g.runtime && active != previous) { g.need_reset = true; previous = active; }
     auto feed = rt->find_technique("DLSS5_Feed.fx", "DLSS5_Feed");
     auto cas = rt->find_technique("NeuralFX_CAS.fx", "NeuralFX_CAS");
     if (feed.handle && rt->get_technique_state(feed) != active) rt->set_technique_state(feed, active);
-    const bool cas_active = active && nfx_sharp_override != 0;
+    const bool cas_active = active && rt == g.runtime && nfx_sharp_override != 0;
     if (cas.handle && rt->get_technique_state(cas) != cas_active) rt->set_technique_state(cas, cas_active);
 }
 static void NeuralFxFinishEffects(reshade::api::effect_runtime* rt, reshade::api::command_list* cl, reshade::api::resource_view, reshade::api::resource_view) {
-    if (rt->get_device()->get_api() == reshade::api::device_api::d3d11) {
+    if (rt == g.runtime && rt->get_device()->get_api() == reshade::api::device_api::d3d11) {
         auto* context = reinterpret_cast<ID3D11DeviceContext*>(cl->get_native());
         if (context && context->GetType() == D3D11_DEVICE_CONTEXT_IMMEDIATE) NeuralFxRetireUnused(context);
     }

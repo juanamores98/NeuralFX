@@ -46,11 +46,11 @@ namespace NeuralFX
             if (now >= _discoverAt)
             {
                 _discoverAt = now + 1;
-                Camera current = Camera.main;
-                if (_camera != current || (_camera != null && _temporal == null))
+                Camera discoveredCamera = Camera.main;
+                if (_camera != discoveredCamera || (_camera != null && _temporal == null))
                 {
                     if (_temporal != null) { _resetSerial = _temporal.ResetSerial; Destroy(_temporal); _temporal = null; }
-                    _camera = current;
+                    _camera = discoveredCamera;
                     if (_camera != null) { _temporal = _camera.gameObject.AddComponent<TemporalCamera>(); _temporal.Bridge = _bridge; _temporal.ResetSerial = ++_resetSerial; }
                 }
             }
