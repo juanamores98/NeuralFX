@@ -105,3 +105,29 @@ static void NeuralFxFinishOutput(NeuralFxPendingOutput* item, const NeuralFxFram
     if (!item) return;
     item->frame = frame; item->committed = committed; item->context->End(item->query);
 }
+
+static void NeuralFxRetireUnused(ID3D11DeviceContext* context) {
+    ID3D11Device* device = nullptr; context->GetDevice(&device);
+    NeuralFxFrameV3 candidates[17] = {};
+    {
+        std::lock_guard<std::mutex> lock(nfx_lock);
+        for (size_t i=0; i<16; ++i) candidates[i] = nfx_abandoned[i];
+        candidates[16] = nfx_render_frame;
+    }
+    for (const auto& frame : candidates) if (frame.motion_handle) {
+        bool same = false;
+        {
+            std::lock_guard<std::mutex> lock(nfx_inputs_lock);
+            for (auto& slot : nfx_motion_slots) if (slot.handle == frame.motion_handle) {
+                ID3D11Device* owner = nullptr; slot.texture->GetDevice(&owner); same = owner == device; owner->Release(); break;
+            }
+        }
+        if (!same) continue;
+        auto* query = NeuralFxPrepareOutput(context); if (!query) break;
+        NeuralFxFinishOutput(query,frame,false);
+        std::lock_guard<std::mutex> lock(nfx_lock);
+        for (auto& pending : nfx_abandoned) if (pending.motion_handle == frame.motion_handle) pending = {};
+        if (nfx_render_frame.motion_handle == frame.motion_handle) nfx_render_frame = {};
+    }
+    device->Release();
+}

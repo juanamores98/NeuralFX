@@ -30,7 +30,6 @@ namespace NeuralFX.Hub.Services
             ini = Ini.Set(ini, "GENERAL", "PresetPath", @".\ReShadePreset.ini");
             ini = Ini.Set(ini, "GENERAL", "StartupPresetPath", @".\ReShadePreset.ini");
             ini = Ini.Set(ini, "GENERAL", "NoReloadOnInit", "0");
-            ini = Ini.Set(ini, "GENERAL", "PerformanceMode", "1");
             ini = Ini.Set(ini, "GENERAL", "NoDebugInfo", "1");
             ini = Ini.Set(ini, "GENERAL", "NoEffectCache", "0");
             ini = Ini.Set(ini, "DEPTH", "DrawStatsHeuristic", "2");

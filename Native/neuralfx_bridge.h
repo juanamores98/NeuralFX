@@ -20,18 +20,47 @@ static uint64_t NeuralFxNow() {
 static NeuralFxFrameV3 nfx_slots[16] = {}, nfx_render_frame = {};
 static NeuralFxStatus nfx_status = {sizeof(NeuralFxStatus), 1, NFX_RESET | NFX_CONTROL | NFX_REGISTERED_MOTION};
 static NeuralFxResult nfx_result = {sizeof(NeuralFxResult), 3};
+static NeuralFxFrameV3 nfx_abandoned[16] = {};
+// Only frames whose render event has executed may enter this retirement queue.
+static void NeuralFxAbandonLocked(const NeuralFxFrameV3& frame) {
+    if (!frame.motion_handle) return;
+    for (auto& pending : nfx_abandoned) if (pending.motion_handle == frame.motion_handle) return;
+    for (auto& pending : nfx_abandoned) if (!pending.motion_handle) { pending = frame; return; }
+}
 static uint32_t nfx_taken_frame = 0, nfx_last_submitted = 0, nfx_camera = 0, nfx_epoch = 0;
 static uint64_t nfx_render_tick = 0, nfx_evaluate_tick = 0, nfx_heartbeat = 0;
 static bool nfx_enabled = false;
+static NeuralFxControls nfx_controls = {24,3,0,0,100,0.3f};
+static uint32_t nfx_controls_applied = 0;
+static int32_t nfx_controls_result = 0;
+static int32_t nfx_work_override = 0;
+static float nfx_sharp_override = -1;
 static bool NeuralFxEnabled() {
     std::lock_guard<std::mutex> lock(nfx_lock);
     return nfx_enabled && NeuralFxNow() - nfx_heartbeat < 3000;
+}
+NFX_EXPORT int NFX_CALL NeuralFX_SetControls(const NeuralFxControls* controls, uint32_t bytes) {
+    if (!controls || bytes != sizeof(NeuralFxControls)) return 0;
+    NeuralFxControls c = {}; std::memcpy(&c, controls, sizeof(c));
+    if (c.size != bytes || c.version != 3 || !c.revision || !c.mask || (c.mask & ~3u)) return 0;
+    if ((c.mask & 1) && c.work_percent != 100 && c.work_percent != 85 && c.work_percent != 66) return 0;
+    if ((c.mask & 2) && (!NeuralFxFinite(c.sharpness) || c.sharpness < 0 || c.sharpness > 1)) return 0;
+    std::lock_guard<std::mutex> lock(nfx_lock);
+    if (nfx_controls.revision && !NeuralFxNewer(c.revision, nfx_controls.revision)) return 0;
+    // Do not silently replace an accepted command that the render thread has not applied.
+    if (nfx_controls_result == 0 && nfx_controls.revision != nfx_controls_applied) return 0;
+    nfx_controls = c; nfx_controls_result = 0; return 1;
+}
+NFX_EXPORT int NFX_CALL NeuralFX_GetControls(NeuralFxControls* controls, uint32_t bytes) {
+    if (!controls || bytes != sizeof(NeuralFxControls)) return 0;
+    std::lock_guard<std::mutex> lock(nfx_lock); *controls = nfx_controls;
+    return nfx_controls_result; // 0 pending, 1 applied to render settings, -1 unsupported uniform
 }
 NFX_EXPORT int NFX_CALL NeuralFX_SetEnabled(uint32_t enabled) {
     if (enabled > 1) return 0;
     std::lock_guard<std::mutex> lock(nfx_lock);
     nfx_enabled = enabled != 0; nfx_heartbeat = NeuralFxNow();
-    if (!nfx_enabled) { nfx_render_frame = {}; nfx_status.result = 0; }
+    if (!nfx_enabled) { NeuralFxAbandonLocked(nfx_render_frame); nfx_render_frame = {}; nfx_status.result = 0; }
     return 1;
 }
 NFX_EXPORT int NFX_CALL NeuralFX_GetCapabilities(void* output, uint32_t bytes) {
@@ -49,8 +78,8 @@ NFX_EXPORT int NFX_CALL NeuralFX_SubmitFrameV3(const void* input, uint32_t bytes
     if (frame.camera && (frame.camera != nfx_camera || frame.epoch != nfx_epoch)) {
         if (nfx_epoch && !NeuralFxNewer(frame.epoch, nfx_epoch)) return 0;
         nfx_camera = frame.camera; nfx_epoch = frame.epoch;
-        nfx_last_submitted = nfx_taken_frame = 0; nfx_render_frame = {};
-        for (auto& slot : nfx_slots) slot = {};
+        nfx_last_submitted = nfx_taken_frame = 0; NeuralFxAbandonLocked(nfx_render_frame); nfx_render_frame = {};
+        // Keep submitted slots until their queued render event executes.
         nfx_result = {sizeof(NeuralFxResult), 3};
         nfx_status.result = 0; nfx_status.reset_serial = frame.reset_serial - 1;
     }
@@ -71,8 +100,12 @@ static void NFX_EVENT NeuralFxRenderEvent(int event_id) {
     std::lock_guard<std::mutex> lock(nfx_lock);
     uint32_t token = static_cast<uint32_t>(event_id);
     auto& slot = nfx_slots[token % 16];
-    if (slot.frame == token && (!slot.epoch || slot.epoch == nfx_epoch)) {
-        nfx_render_frame = slot; nfx_render_tick = NeuralFxNow(); slot = {};
+    if (slot.frame == token) {
+        if ((!slot.epoch || slot.epoch == nfx_epoch) && nfx_enabled) {
+            NeuralFxAbandonLocked(nfx_render_frame);
+            nfx_render_frame = slot; nfx_render_tick = NeuralFxNow();
+        } else NeuralFxAbandonLocked(slot);
+        slot = {};
     }
 }
 NFX_EXPORT void* NFX_CALL NeuralFX_GetRenderEvent() { return reinterpret_cast<void*>(&NeuralFxRenderEvent); }

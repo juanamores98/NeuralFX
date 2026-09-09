@@ -22,6 +22,7 @@ struct NeuralFxFrameV3 {
     float mv_scale_x, mv_scale_y;
     uint32_t magic, reserved;
 };
+struct NeuralFxControls { uint32_t size, version, revision, mask; int32_t work_percent; float sharpness; };
 struct NeuralFxStatus {
     uint32_t size, version, capabilities, frame, reset_serial, evaluations, width, height;
     int32_t result;

@@ -10,6 +10,9 @@ namespace NeuralFX.Rendering
         private Camera _camera;
         private CommandBuffer _event;
         private readonly FrameCoordinator _frames = new FrameCoordinator();
+        private readonly CameraModeLease _modes = new CameraModeLease();
+        public bool RestoreConflict { get { return _modes.Conflict || _projection.Conflict; } }
+        public void EnsureCameraModes() { if (_camera != null) _modes.Acquire(_camera); }
         private readonly ProjectionLease _projection = new ProjectionLease();
         private readonly EngineInputProvider _inputs = new EngineInputProvider();
         private Vector3 _position; private Quaternion _rotation;
@@ -21,7 +24,8 @@ namespace NeuralFX.Rendering
         {
             if (_event != null) _event.Clear();
             _projection.Restore();
-            if (_camera == null || Bridge == null || !Bridge.Connected || !ModSettings.PipelineEnabled) return;
+            if (_camera == null || Bridge == null || !Bridge.Connected || !ModSettings.PipelineEnabled) { _modes.Release(); return; }
+            if (!ModSettings.ExperimentalOptIn || (!ModSettings.EnableNativeMotionVectors && !ModSettings.ForceMotionVectorsOnLoad)) { _modes.Release(); _inputs.Release(); }
             int width = _camera.pixelWidth, height = _camera.pixelHeight;
             if (width <= 0 || height <= 0 || width > Bridge.Capabilities.MaxDimension || height > Bridge.Capabilities.MaxDimension) return;
             bool resize = width != _width || height != _height;
@@ -36,7 +40,7 @@ namespace NeuralFX.Rendering
             uint motion = 0;
             if (ModSettings.ExperimentalOptIn && ModSettings.EnableNativeMotionVectors && (Bridge.Capabilities.Supported & 16) != 0)
             {
-                _camera.depthTextureMode |= DepthTextureMode.Depth | DepthTextureMode.MotionVectors;
+                EnsureCameraModes();
                 if (_inputs.Prepare(Bridge, cameraId, _frames.Epoch, width, height)) motion = _inputs.Record(_event);
             }
             var frame = new NativeFrame {
@@ -53,7 +57,7 @@ namespace NeuralFX.Rendering
         {
             _projection.Restore();
             if (_event != null) { if (_camera != null) _camera.RemoveCommandBuffer(CameraEvent.AfterEverything, _event); _event.Release(); _event = null; }
-            _inputs.Release(); _previous = false;
+            _inputs.Release(); _modes.Release(); _previous = false;
         }
     }
 }

@@ -17,11 +17,12 @@ namespace NeuralFX.Protocol
         public static string Details(TelemetryFrame frame)
         {
             string motion = frame.MotionProvider == 2 ? "Unity experimental (cobertura sin validar)" : frame.MotionProvider == 1 ? "Óptico" : "Sin entrada confirmada";
-            return "Movimiento: " + motion + "\nUI protegida: " + (Has(frame, RuntimeFlags.UiIsolated) ? "sí" : "sin verificar") +
+            return "Puente build " + frame.BridgeBuild + " / ABI 3 / IPC 4\nMovimiento: " + motion + "\nUI protegida: " + (Has(frame, RuntimeFlags.UiIsolated) ? "sí" : "sin verificar") +
                 "\nEscena / trabajo NR / salida: " + frame.RenderWidth + "x" + frame.RenderHeight + " / " + frame.WorkWidth + "x" + frame.WorkHeight + " / " + frame.DisplayWidth + "x" + frame.DisplayHeight +
                 "\nFrame grabado / enviado / completado / incorporado: " + frame.RecordedFrame + " / " + frame.SubmittedFrame + " / " + frame.CompletedFrame + " / " + frame.OutputFrame +
                 "\nReset solicitado / completado: " + frame.CameraCuts + " / " + frame.ResetCount +
-                "\nTiempo GPU NR: no medido. SR interno: no disponible.";
+                "\nTiempo GPU NR: no medido. SR interno: no disponible." +
+                (frame.ControlsRevision != 0 ? "\nAjuste #" + frame.ControlsRevision + ": " + (frame.ControlsResult == 1 ? "aplicado a configuración del render" : frame.ControlsResult == -1 ? "rechazado" : "pendiente") : "");
         }
     }
 }

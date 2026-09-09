@@ -1,8 +1,10 @@
-# NeuralFX — Hub 2.0.2 · Cities: Skylines 1
+# NeuralFX — consolidación 2.1.0 · Cities: Skylines 1
 
 Hub de instalación y diagnóstico, mod de telemetría y puente nativo para ReShade → DLSS5-Feeder → RenoDX. Proyecto de **juanamores98**.
 
-La compilación actual está preparada para validación en una ciudad. La prueba gráfica aislada confirma evaluaciones NR y resets a 3840×2160 en una RTX 5080. La calidad en movimiento, profundidad de CS1 e interfaz requieren la [prueba manual](docs/PRUEBAS-CS1.md).
+Esta versión consolida ABI, seguridad de cámara, movimiento, controles y confianza. **No completa aún la integración DLSS 5 del superplan.** El portador NGX y su salida GPU se miden por separado de NR; pre-UI, SR interno y confirmación NR por frame están pendientes. El jitter está bloqueado.
+
+Lee primero la [entrega, estado de los 15 cortes y guía para tu PC](docs/CONSOLIDACION-2026-09.md). La [evidencia anterior](docs/VALIDACION.md) corresponde a otros binarios; no valida automáticamente bridge build 4 / ABI 3. Actualiza mod, Hub y addon juntos.
 
 ## Instalar y abrir
 
@@ -36,7 +38,7 @@ El Hub reside fuera de Mods porque CS1 intenta cargar recursivamente sus DLL de 
 - Envía el reset de cámara al hilo de render y a NGX. Rechaza jitter distinto de cero hasta disponer de una integración temporal completa.
 - Usa un panel Colossal arrastrable (`Ctrl + Alt + N`), sin `OnGUI`. ReShade se abre con `Home`, salvo que hayas personalizado su atajo.
 
-La ruta consume **movimiento estimado por LumeniteFX**. Solicitar MotionVectors a Unity no conecta sus texturas con NGX. El panel nativo tampoco excluye la UI del procesamiento neural: esa fase sigue pendiente. No hay jitter de cámara ni resolución dinámica del render de Unity.
+La ruta predeterminada consume **movimiento estimado por LumeniteFX**. La opción experimental copia vectores Unity a recursos propios registrados; su signo y cobertura de objetos necesitan validación en CS1. El panel nativo tampoco excluye la UI del procesamiento neural: esa fase sigue pendiente. No hay jitter de cámara ni resolución dinámica del render de Unity.
 
 ## Presets
 
@@ -67,13 +69,10 @@ Esta acción restaura **el pipeline del juego**. **No desinstala el Hub ni el mo
 
 ## Compilar y verificar
 
-Requiere SDK .NET compatible con `.slnx`, ensamblados administrados de CS1, MSVC C++ x64 y Windows SDK. Puedes indicar `ManagedDLLPath` como propiedad de MSBuild si Steam está en otra ubicación. Compilar no despliega automáticamente.
+Requiere .NET SDK 8, ensamblados administrados de CS1, MSVC C++ x64 y Windows SDK. Puedes indicar `ManagedDLLPath` como propiedad de MSBuild si Steam está en otra ubicación. Compilar no despliega automáticamente.
 
 ```powershell
-./Native/build.ps1
-dotnet build NeuralFX.slnx -c Release -p:SkipDeploy=true
-dotnet test NeuralFX.Tests -c Release
-./tools/package.ps1 -Deploy
+./tools/Build-NeuralFX.ps1 -ManagedDLLPath 'D:\Steam\steamapps\common\Cities_Skylines\Cities_Data\Managed' -Package
 ```
 
 `Native/build.ps1` obtiene fuentes fijadas, comprueba los parches y ejecuta las pruebas nativas. `tools/package.ps1` compila, prueba, publica y genera un ZIP con `deployment-manifest.json` calculado sobre sus archivos reales. `-Deploy` lo instala con backups. El manifiesto de distribución se genera por paquete; no se conserva una copia estática en el código.

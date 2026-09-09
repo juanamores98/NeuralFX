@@ -23,7 +23,9 @@ namespace NeuralFX
         private int _pid;
         private CommandResult _commandResult;
         private int _commandReason;
-        private uint _commandReset;
+        private uint _commandReset, _controlRevision;
+        private bool _commandIsControl;
+        public string ControlMessage { get; private set; }
         public TelemetryFrame CurrentFrame { get; private set; }
         public string BridgeReason { get { return _bridge.Reason; } }
         public static void ToggleWindow() { if (_instance != null) _instance._panel.Toggle(); }
@@ -68,7 +70,7 @@ namespace NeuralFX
             TelemetryCommand command;
             if (_channel != null && _channel.TryReadCommand(out command) && FramePolicy.Newer(unchecked((uint)command.Revision), unchecked((uint)_lastCommand)))
             {
-                _commandResult = CommandResult.Accepted; _commandReason = 0;
+                _commandResult = CommandResult.Accepted; _commandReason = 0; _commandIsControl = false;
                 if (command.ExpiresUtcTicks < System.DateTime.UtcNow.Ticks) { _commandResult = CommandResult.Rejected; _commandReason = 1; }
                 else if (command.Kind == CommandKind.TogglePanel) { ToggleWindow(); _commandResult = CommandResult.Applied; }
                 else if (command.Kind == CommandKind.ReapplyBuffers && ModSettings.ExperimentalOptIn) { EnsureCameraModes(); _commandResult = CommandResult.Applied; }
@@ -76,6 +78,10 @@ namespace NeuralFX
                 else if (command.Kind == CommandKind.EnablePipeline || command.Kind == CommandKind.DisablePipeline) {
                     if (SetPipelineEnabled(command.Kind == CommandKind.EnablePipeline)) _commandResult = CommandResult.Applied;
                     else { _commandResult = CommandResult.Rejected; _commandReason = 3; }
+                }
+                else if (command.Kind == CommandKind.SetWorkResolution || command.Kind == CommandKind.SetSharpness) {
+                    _commandIsControl = true;
+                    if (!SetSessionControls(command.Kind == CommandKind.SetWorkResolution ? command.IntValue : 0, command.Kind == CommandKind.SetSharpness ? command.FloatValue : -1)) { _commandResult = CommandResult.Rejected; _commandReason = 4; }
                 }
                 else { _commandResult = CommandResult.Rejected; _commandReason = 2; }
                 _lastCommand = command.Revision;
@@ -102,23 +108,40 @@ namespace NeuralFX
             if (current && result.OutputCommitted > 0) flags |= RuntimeFlags.OutputCommitted;
             if (current && result.NrConfirmed != 0) flags |= RuntimeFlags.NrConfirmed;
             if (current && result.UiIsolated != 0) flags |= RuntimeFlags.UiIsolated;
-            if (_commandResult == CommandResult.Accepted && current && result.ResetSerial == _commandReset) _commandResult = CommandResult.Applied;
+            if (!_commandIsControl && _commandResult == CommandResult.Accepted && current && (result.ResetSerial == _commandReset || FramePolicy.Newer(result.ResetSerial,_commandReset))) _commandResult = CommandResult.Applied;
+            var controls = new NativeControls(); int controlResult = _bridge.ReadControls(ref controls);
+            if (_controlRevision != 0 && controls.Revision == _controlRevision && controlResult != 0) {
+                ControlMessage = controlResult == 1 ? "Ajuste aplicado; comprueba dimensiones efectivas" : "Ajuste rechazado: el uniform CAS no está disponible";
+                if (_commandIsControl && _commandResult == CommandResult.Accepted) _commandResult = controlResult == 1 ? CommandResult.Applied : CommandResult.Rejected;
+            }
             CurrentFrame = new TelemetryFrame {
                 ProcessId = _pid, UtcTicks = System.DateTime.UtcNow.Ticks, Fps = _fps, FrameMs = _frameMs,
                 DisplayWidth = Screen.width, DisplayHeight = Screen.height, RenderWidth = _camera != null ? _camera.pixelWidth : 0,
                 RenderHeight = _camera != null ? _camera.pixelHeight : 0, Flags = flags, CameraCuts = _resetSerial,
                 FrameIndex = Time.frameCount, LastCommand = _lastCommand, NativeStatus = recent ? status.Result : 0, ResetCount = status.ResetSerial,
                 WorkWidth = status.Width, WorkHeight = status.Height, Evaluations = status.Evaluations,
-                DeviceEpoch = result.Epoch, CameraId = result.Camera, RecordedFrame = result.Recorded, SubmittedFrame = result.Submitted,
+                BridgeBuild = _bridge.Capabilities.Build, DeviceEpoch = result.Epoch, CameraId = result.Camera, RecordedFrame = result.Recorded, SubmittedFrame = result.Submitted,
                 CompletedFrame = result.Completed, OutputFrame = result.OutputCommitted, MotionProvider = current ? result.MotionProvider : 0,
                 AdapterLow = result.AdapterLow, AdapterHigh = result.AdapterHigh, BackendError = current ? result.Error : 0,
-                CommandResult = _commandResult, CommandReason = _commandReason
+                CommandResult = _commandResult, CommandReason = _commandReason, ControlsRevision=controls.Revision, ControlsResult=controlResult, RequestedWork=controls.WorkPercent, RequestedSharpness=controls.Sharpness
             };
             if (_channel != null) _channel.Publish(CurrentFrame);
             if (_panel.Visible) _panel.Update(string.Format("{0:F1} FPS · intervalo del juego {1:F2} ms", _fps, _frameMs),
                 SessionViewState.Summary(CurrentFrame), SessionViewState.Details(CurrentFrame),
                 !string.IsNullOrEmpty(ModSettings.LastSaveError) ? "Guardado pendiente: " + ModSettings.LastSaveError :
+                _temporal != null && _temporal.RestoreConflict ? "Se conserva un cambio posterior de otro mod en la cámara." :
                 _conflicts.Length == 0 ? "Sin AA adicional detectado. NR requiere comprobación independiente." : "Revisar AA: " + string.Join(", ", _conflicts));
+        }
+        public bool SetSessionControls(int workPercent, float sharpness)
+        {
+            if (!ModSettings.PipelineEnabled || !_bridge.Connected) { ControlMessage = "Activa el pipeline y comprueba el puente"; return false; }
+            var previous = new NativeControls(); _bridge.ReadControls(ref previous);
+            var controls = new NativeControls { Size=24, Version=3, Revision=unchecked(previous.Revision+1), Mask=(workPercent!=0?1u:0u)|(sharpness>=0?2u:0u), WorkPercent=workPercent, Sharpness=sharpness };
+            if (controls.Revision==0) controls.Revision=1;
+            bool accepted = _bridge.SetControls(ref controls);
+            ControlMessage = accepted ? "Ajuste pendiente del hilo de render" : "Ajuste rechazado o hay otro pendiente";
+            if (accepted) _controlRevision=controls.Revision;
+            return accepted;
         }
         public bool SetPipelineEnabled(bool enabled)
         {
@@ -133,10 +156,7 @@ namespace NeuralFX
         public void EnsureCameraModes()
         {
             if (!ModSettings.PipelineEnabled || !ModSettings.ExperimentalOptIn || !_bridge.Connected) return;
-            Camera camera = _camera != null ? _camera : Camera.main;
-            if (camera == null) return;
-            const DepthTextureMode desired = DepthTextureMode.Depth | DepthTextureMode.MotionVectors;
-            if ((camera.depthTextureMode & desired) != desired) camera.depthTextureMode |= desired;
+            if (_temporal != null) _temporal.EnsureCameraModes();
         }
         public void RequestHistoryReset()
         {

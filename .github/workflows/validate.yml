@@ -22,6 +22,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Parse maintained PowerShell scripts
+        shell: pwsh
+        run: |
+          $scripts = @('Native/build.ps1','Native/smoke.ps1') + @(Get-ChildItem tools -Filter '*.ps1' | ForEach-Object FullName)
+          foreach ($script in $scripts) {
+            $tokens=$null; $errors=$null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$tokens,[ref]$errors)
+            if ($errors.Count) { throw ($errors | Out-String) }
+          }
       - name: Hub and IPC tests (no game assemblies)
         run: dotnet test NeuralFX.Tests/NeuralFX.Tests.csproj -c Release -p:BuildMod=false --logger 'trx;LogFileName=hub.trx'
       - name: Mod contracts with Unity doubles
@@ -30,7 +39,7 @@ jobs:
       - name: Build pinned feeder and native tests
         if: always()
         shell: pwsh
-        run: ./Native/build.ps1
+        run: ./Native/build.ps1 -SmokeHarness
       - uses: actions/upload-artifact@v4
         if: always()
         with:

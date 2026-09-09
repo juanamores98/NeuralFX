@@ -118,6 +118,7 @@ namespace NeuralFX.Config
             }
             catch (Exception ex)
             {
+                LastSaveError = ex.Message;
                 Debug.LogWarning("[NeuralFX] Error cargando configuracion: " + ex.Message);
             }
         }

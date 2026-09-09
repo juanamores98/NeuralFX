@@ -26,6 +26,8 @@ namespace NeuralFX.Rendering
         public int AdapterHigh;
         public uint Reserved;
     }
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    internal struct NativeControls { public uint Size, Version, Revision, Mask; public int WorkPercent; public float Sharpness; }
     internal sealed class NativeBridge
     {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SubmitDelegate(ref NativeFrame data, uint bytes);
@@ -37,12 +39,14 @@ namespace NeuralFX.Rendering
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate uint RegisterDelegate(IntPtr texture, uint camera, uint epoch);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ReserveDelegate(uint handle);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void ReleaseDelegate(uint handle);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ControlsDelegate(ref NativeControls data, uint bytes);
+        private ControlsDelegate _setControls, _getControls;
         private SubmitDelegate _submit; private StatusDelegate _status; private ResultDelegate _result;
         private EnableDelegate _enable; private RegisterDelegate _register; private ReserveDelegate _reserve; private ReleaseDelegate _release, _cancel;
         public NativeCapabilities Capabilities { get; private set; }
         public string Reason { get; private set; }
         public IntPtr RenderEvent { get; private set; }
-        public bool Connected { get { return _submit != null && _status != null && _enable != null && RenderEvent != IntPtr.Zero; } }
+        public bool Connected { get { return _submit != null && _status != null && _result != null && _enable != null && _setControls != null && _getControls != null && _register != null && _reserve != null && _release != null && _cancel != null && RenderEvent != IntPtr.Zero; } }
         private static Delegate Resolve(IntPtr module, string name, Type type)
         {
             IntPtr address = NativeInterop.GetProcAddress(module, name);
@@ -54,7 +58,7 @@ namespace NeuralFX.Rendering
             if (module == IntPtr.Zero) { Reason = "Puente sin cargar"; return false; }
             var probe = (CapabilitiesDelegate)Resolve(module, "NeuralFX_GetCapabilities", typeof(CapabilitiesDelegate));
             var caps = new NativeCapabilities();
-            if (probe == null || probe(ref caps, 32) != 1 || caps.Version != 3 || caps.Build != 4 || caps.FrameBytes != 64 || caps.ResultBytes != 80 || (caps.Supported & 9) != 9)
+            if (probe == null || probe(ref caps, 32) != 1 || caps.Size != 32 || caps.Version != 3 || caps.Build != 4 || caps.FrameBytes != 64 || caps.ResultBytes != 80 || (caps.Supported & 9) != 9)
             { Reason = "Puente incompatible; actualiza mod y Hub juntos y reinicia el juego"; return false; }
             var callback = (EventDelegate)Resolve(module, "NeuralFX_GetRenderEvent", typeof(EventDelegate));
             _submit = (SubmitDelegate)Resolve(module, "NeuralFX_SubmitFrameV3", typeof(SubmitDelegate));
@@ -65,10 +69,14 @@ namespace NeuralFX.Rendering
             _reserve = (ReserveDelegate)Resolve(module, "NeuralFX_ReserveMotion", typeof(ReserveDelegate));
             _release = (ReleaseDelegate)Resolve(module, "NeuralFX_ReleaseMotion", typeof(ReleaseDelegate));
             _cancel = (ReleaseDelegate)Resolve(module, "NeuralFX_CancelMotion", typeof(ReleaseDelegate));
+            _setControls = (ControlsDelegate)Resolve(module, "NeuralFX_SetControls", typeof(ControlsDelegate));
+            _getControls = (ControlsDelegate)Resolve(module, "NeuralFX_GetControls", typeof(ControlsDelegate));
             RenderEvent = callback != null ? callback() : IntPtr.Zero;
             Capabilities = caps; Reason = Connected ? "Puente ABI 3 negociado; NR sin confirmar" : "Exports incompletos";
             return Connected;
         }
+        public int ReadControls(ref NativeControls controls) { return Connected && _getControls != null ? _getControls(ref controls,24) : -1; }
+        public bool SetControls(ref NativeControls controls) { return Connected && _setControls != null && _setControls(ref controls,24) == 1; }
         public bool SetEnabled(bool enabled) { return Connected && _enable(enabled ? 1u : 0u) == 1; }
         public uint RegisterMotion(IntPtr texture, uint camera, uint epoch) { return Connected && _register != null ? _register(texture, camera, epoch) : 0; }
         public bool ReserveMotion(uint handle) { return Connected && _reserve != null && _reserve(handle) == 1; }

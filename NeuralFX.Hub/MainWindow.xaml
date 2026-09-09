@@ -170,6 +170,10 @@
                         <WrapPanel x:Name="TelemetryCommands" IsEnabled="False" Margin="0,0,0,16">
                             <Button Content="Abrir/Cerrar Panel In-Game (Ctrl+Alt+N)" Tag="TogglePanel" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" />
                             <Button Content="Activar NeuralFX" Tag="EnablePipeline" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" /><Button Content="Desactivar NeuralFX" Tag="DisablePipeline" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" /><Button Content="Reaplicar buffers experimentales" Tag="ReapplyBuffers" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" />
+                            <ComboBox x:Name="SessionWorkSelector" AutomationProperties.Name="Trabajo NR de la sesión" SelectedIndex="0" MinWidth="100"><ComboBoxItem Content="NR 100%"/><ComboBoxItem Content="NR 85%"/><ComboBoxItem Content="NR 66%"/></ComboBox>
+                            <Button Content="Aplicar trabajo NR" Tag="SetWorkResolution" Click="BtnTelemetryCommand_Click" Margin="6,0,8,6"/>
+                            <ComboBox x:Name="SessionSharpSelector" AutomationProperties.Name="Nitidez de la sesión" SelectedIndex="2" MinWidth="120"><ComboBoxItem Content="Nitidez apagada"/><ComboBoxItem Content="Nitidez 0,15"/><ComboBoxItem Content="Nitidez 0,30"/></ComboBox>
+                            <Button Content="Aplicar nitidez" Tag="SetSharpness" Click="BtnTelemetryCommand_Click" Margin="6,0,8,6"/>
                             <Button Content="Reset de Historial Temporal" Tag="ResetHistory" Click="BtnTelemetryCommand_Click" Margin="0,0,8,6" />
                         </WrapPanel>
 

@@ -46,6 +46,19 @@ int main(){
         frame.epoch=2;Probe(device,context,frame,optical,opticalView,percent,false);frame.epoch=1;
     }
     NeuralFX_ReleaseMotion(handle);assert(!NeuralFX_ReserveMotion(handle));NeuralFX_CancelMotion(handle);assert(!NeuralFX_ReserveMotion(handle));
+    // A disabled camera may have copied a slot which the feeder never consumed.
+    handle=NeuralFX_RegisterMotion(native,42,2);assert(handle&&NeuralFX_ReserveMotion(handle));
+    frame.epoch=2;frame.frame=10;frame.motion_handle=handle;
+    NeuralFX_SetEnabled(1);assert(NeuralFX_SubmitFrameV3(&frame,64));NeuralFxRenderEvent(10);
+    NeuralFX_SetEnabled(0);NeuralFX_ReleaseMotion(handle);NeuralFxRetireUnused(context);
+    context->Flush();
+    bool retired=false;
+    for(int attempt=0;attempt<5000&&!retired;attempt++) {
+        NeuralFxPollOutputs();retired=true;
+        for(const auto& slot:nfx_motion_slots)if(slot.handle==handle)retired=false;
+        if(!retired)Sleep(1);
+    }
+    assert(retired); // own COM retention ended only after the event query
     opticalView->Release();optical->Release();native->Release();context->Release();device->Release();
     std::puts("D3D11 WARP: registered resource/SRV/scale selection, optical fallback, epochs, bounded reservation, 100/85/66 percent and odd extents passed. Not an NGX/CS1 capture.");
 }

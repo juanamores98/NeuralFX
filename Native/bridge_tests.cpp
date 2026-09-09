@@ -38,5 +38,11 @@ int main() {
     f.frame=3; f.jitter_x=.25f; assert(!NeuralFX_SubmitFrameV3(&f,64)); f.jitter_x=0;
     NeuralFX_SetEnabled(0); assert(!NeuralFX_SubmitFrameV3(&f,64));
     assert(NeuralFxNewer(1,UINT32_MAX) && !NeuralFxNewer(UINT32_MAX,1));
+    NeuralFxControls controls = {24,3,1,1,67,.3f};
+    assert(!NeuralFX_SetControls(&controls,24)); controls.work_percent=85; assert(NeuralFX_SetControls(&controls,24));
+    controls.revision=2; assert(!NeuralFX_SetControls(&controls,24)); // previous render-thread command still pending
+    nfx_controls_applied=1; nfx_controls_result=1; assert(NeuralFX_SetControls(&controls,24));
+    nfx_controls_applied=2; nfx_controls_result=1; controls.revision=3; controls.mask=2; controls.sharpness=std::numeric_limits<float>::quiet_NaN();
+    assert(!NeuralFX_SetControls(&controls,24)); controls.sharpness=0; assert(NeuralFX_SetControls(&controls,24));
     std::puts("Bridge contract passed: exact V1 allocation, V2/V3, malformed buffers, finite values, replay, epochs, completion, safe jitter and Off.");
 }

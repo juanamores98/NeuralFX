@@ -9,10 +9,11 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>NeuralFX.Hub</RootNamespace>
     <AssemblyName>NeuralFX.Hub</AssemblyName>
-    <Version>2.0.2</Version>
+    <Version>2.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\Native\out\capabilities.json" LogicalName="NeuralFX.Native.Capabilities" Condition="Exists('..\Native\out\capabilities.json')" />
     <EmbeddedResource Include="..\Native\out\dlss5-feed.addon64" LogicalName="NeuralFX.Native.Feeder" Condition="Exists('..\Native\out\dlss5-feed.addon64')" />
     <EmbeddedResource Include="..\NeuralFX.Mod\bin\Release\net35\NeuralFX.dll" LogicalName="NeuralFX.Mod.Assembly" Condition="Exists('..\NeuralFX.Mod\bin\Release\net35\NeuralFX.dll')" />
     <EmbeddedResource Include="Assets\**\*" />

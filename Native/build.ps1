@@ -41,30 +41,42 @@ $nativeMvInjection = @'
     }
     NeuralFxPendingOutput* neuralfx_output = NeuralFxPrepareOutput(ctx);
     if (!neuralfx_output) {
+        { std::lock_guard<std::mutex> lock(nfx_lock); NeuralFxAbandonLocked(neuralfx_frame); }
         SafeRelease(color); SafeRelease(mv); SafeRelease(depth); SafeRelease(mask);
         return; // bounded queue: leave the current scene untouched
     }
     bool neuralfx_committed = false;
     ID3D11Device* neuralfx_device = nullptr; ctx->GetDevice(&neuralfx_device);
     NeuralFxSelectedMotion neuralfx_motion;
-    neuralfx_motion.Select(neuralfx_device, neuralfx_frame, mv,
+    const bool neuralfx_motion_ok = neuralfx_motion.Select(neuralfx_device, neuralfx_frame, mv,
         reinterpret_cast<ID3D11ShaderResourceView*>(mv_srv.handle), g_cfg.mv_scale_x, g_cfg.mv_scale_y);
     // Device identity comes from the actual rendering device, never registry order.
+    static ID3D11Device* neuralfx_identity_device = nullptr;
+    static uint32_t neuralfx_identity_epoch = 0;
     IDXGIDevice* neuralfx_dxgi = nullptr;
-    if (SUCCEEDED(neuralfx_device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&neuralfx_dxgi)))) {
+    if ((neuralfx_identity_device != neuralfx_device || neuralfx_identity_epoch != neuralfx_frame.epoch) && SUCCEEDED(neuralfx_device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&neuralfx_dxgi)))) {
         IDXGIAdapter* adapter = nullptr;
         if (SUCCEEDED(neuralfx_dxgi->GetAdapter(&adapter))) {
             DXGI_ADAPTER_DESC info = {}; adapter->GetDesc(&info);
             { std::lock_guard<std::mutex> lock(nfx_lock); nfx_result.adapter_low = info.AdapterLuid.LowPart; nfx_result.adapter_high = info.AdapterLuid.HighPart; }
             adapter->Release();
         }
-        neuralfx_dxgi->Release();
+        neuralfx_dxgi->Release(); neuralfx_identity_device = neuralfx_device; neuralfx_identity_epoch = neuralfx_frame.epoch;
     }
     neuralfx_device->Release();
     static uint32_t neuralfx_previous_provider = 0;
     if (neuralfx_previous_provider != neuralfx_motion.provider) { g.need_reset = true; neuralfx_previous_provider = neuralfx_motion.provider; }
 '@
 $body = Replace-Once $body $marker ($marker + "`n" + $nativeMvInjection)
+$body = Replace-Once $body '    if ((g.frames_done % 60) == 0 && CfgReload()) g.frame_ready = false;' @'
+    if ((g.frames_done % 60) == 0 && CfgReload()) g.frame_ready = false;
+    if (nfx_work_override) {
+        g_cfg.work_resolution = nfx_work_override;
+        g_cfg.work_upscale = nfx_work_override < 100 ? 1 : 0;
+        g_cfg.work_sharpness = 0;
+    }
+'@
+$body = Replace-Once $body '    bool ok = true;' '    bool ok = neuralfx_motion_ok;'
 $body = Replace-Once $body 'CopyOrResampleInputs(ctx, color, mv, depth, mask,' 'CopyOrResampleInputs(ctx, color, neuralfx_motion.texture, depth, mask,'
 $body = Replace-Once $body 'reinterpret_cast<ID3D11ShaderResourceView *>(mv_srv.handle),' 'neuralfx_motion.view,'
 $body = Replace-Once $body 'ep.InReset           = reset;' 'ep.InReset           = reset || NeuralFxResetNeeded(neuralfx_frame);'
@@ -84,11 +96,12 @@ const UINT64 v_out = EndCommands();
 '@
 $body = Replace-Once $body ('                    g.ctx4->Wait(g.fence11, v_out);' + "`n" + '                    BlitOutputToBackbuffer(ctx, rtv11);') @'
                     const HRESULT neuralfx_wait = g.ctx4->Wait(g.fence11, v_out);
-                    if (SUCCEEDED(neuralfx_wait) && SUCCEEDED(g.dev11->GetDeviceRemovedReason())) {
+                    const HRESULT neuralfx_device_result = g.dev11->GetDeviceRemovedReason();
+                    if (SUCCEEDED(neuralfx_wait) && SUCCEEDED(neuralfx_device_result)) {
                         BlitOutputToBackbuffer(ctx, rtv11);
                         neuralfx_committed = true;
                     } else {
-                        NeuralFxRecorded(neuralfx_frame, static_cast<int32_t>(neuralfx_wait), false, g.width, g.height, neuralfx_motion.provider);
+                        NeuralFxRecorded(neuralfx_frame, static_cast<int32_t>(FAILED(neuralfx_wait) ? neuralfx_wait : neuralfx_device_result), false, g.width, g.height, neuralfx_motion.provider);
                         FeedDisable("D3D11 result wait failed; restart the game");
                     }
 '@
@@ -100,17 +113,42 @@ $source = Replace-Once $source 'static void DrawOverlay(reshade::api::effect_run
 static void NeuralFxBeginEffects(reshade::api::effect_runtime* rt, reshade::api::command_list*, reshade::api::resource_view, reshade::api::resource_view) {
     NeuralFxPollOutputs();
     const bool active = NeuralFxEnabled();
+    NeuralFxControls controls;
+    bool controls_pending;
+    { std::lock_guard<std::mutex> lock(nfx_lock); controls = nfx_controls; controls_pending = controls.revision != nfx_controls_applied && nfx_controls_result == 0; }
+    if (controls_pending && active && rt == g.runtime) {
+        auto sharp = rt->find_uniform_variable("NeuralFX_CAS.fx", "Sharpening");
+        if ((controls.mask & 2) && controls.sharpness > 0 && !sharp.handle) {
+            std::lock_guard<std::mutex> lock(nfx_lock); nfx_controls_result = -1;
+        } else {
+            if (controls.mask & 1) nfx_work_override = controls.work_percent;
+            if (controls.mask & 2) nfx_sharp_override = controls.sharpness;
+            if ((controls.mask & 1) && g_cfg.work_resolution != controls.work_percent) {
+                g_cfg.work_resolution = controls.work_percent; g_cfg.work_upscale = controls.work_percent < 100 ? 1 : 0;
+                g_cfg.work_sharpness = 0; g.frame_ready = false; g.need_reset = true;
+            }
+            if ((controls.mask & 2) && sharp.handle) rt->set_uniform_value_float(sharp, &controls.sharpness, 1);
+            std::lock_guard<std::mutex> lock(nfx_lock); nfx_controls_applied = controls.revision; nfx_controls_result = 1;
+        }
+    }
     static bool previous = false;
     if (active != previous) { g.need_reset = true; previous = active; }
     auto feed = rt->find_technique("DLSS5_Feed.fx", "DLSS5_Feed");
     auto cas = rt->find_technique("NeuralFX_CAS.fx", "NeuralFX_CAS");
     if (feed.handle && rt->get_technique_state(feed) != active) rt->set_technique_state(feed, active);
-    if (cas.handle && rt->get_technique_state(cas) != active) rt->set_technique_state(cas, active);
+    const bool cas_active = active && nfx_sharp_override != 0;
+    if (cas.handle && rt->get_technique_state(cas) != cas_active) rt->set_technique_state(cas, cas_active);
+}
+static void NeuralFxFinishEffects(reshade::api::effect_runtime* rt, reshade::api::command_list* cl, reshade::api::resource_view, reshade::api::resource_view) {
+    if (rt->get_device()->get_api() == reshade::api::device_api::d3d11) {
+        auto* context = reinterpret_cast<ID3D11DeviceContext*>(cl->get_native());
+        if (context && context->GetType() == D3D11_DEVICE_CONTEXT_IMMEDIATE) NeuralFxRetireUnused(context);
+    }
 }
 static void DrawOverlay(reshade::api::effect_runtime *rt)
 '@
-$source = Replace-Once $source '        reshade::register_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' ('        reshade::register_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' + "`n" + '        reshade::register_event<reshade::addon_event::reshade_begin_effects>(NeuralFxBeginEffects);')
-$source = Replace-Once $source '        reshade::unregister_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' ('        reshade::unregister_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' + "`n" + '        reshade::unregister_event<reshade::addon_event::reshade_begin_effects>(NeuralFxBeginEffects);')
+$source = Replace-Once $source '        reshade::register_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' ('        reshade::register_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' + "`n" + '        reshade::register_event<reshade::addon_event::reshade_begin_effects>(NeuralFxBeginEffects);' + "`n" + '        reshade::register_event<reshade::addon_event::reshade_finish_effects>(NeuralFxFinishEffects);')
+$source = Replace-Once $source '        reshade::unregister_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' ('        reshade::unregister_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' + "`n" + '        reshade::unregister_event<reshade::addon_event::reshade_begin_effects>(NeuralFxBeginEffects);' + "`n" + '        reshade::unregister_event<reshade::addon_event::reshade_finish_effects>(NeuralFxFinishEffects);')
 Set-Content -LiteralPath (Join-Path $upstreamRoot 'src/dlss5-feed.cpp') -Value $source -Encoding utf8
 Get-ChildItem -LiteralPath $nativeRoot -Filter 'neuralfx_*.h' | Copy-Item -Destination (Join-Path $upstreamRoot 'src') -Force
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
@@ -168,3 +206,13 @@ New-Item -ItemType Directory -Path $output -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $upstreamRoot 'build/dlss5-feed.addon64') -Destination $output -Force
 if ($SmokeHarness) { Copy-Item -LiteralPath (Join-Path $upstreamRoot 'build/NeuralFX.Smoke.exe') -Destination $output -Force }
 Write-Output "Native artifact: $output/dlss5-feed.addon64"
+
+$buildManifest = [ordered]@{
+    sourceCommit = (& git -C (Split-Path -Parent $nativeRoot) rev-parse HEAD)
+    bridgeBuild = 4; frameAbi = 3; frameBytes = 64; resultBytes = 80; ipc = 4
+    artifactSha256 = (Get-FileHash -LiteralPath (Join-Path $output 'dlss5-feed.addon64') -Algorithm SHA256).Hash.ToLowerInvariant()
+    supported = @('reset','session-control','registered-motion-experimental','work-resolution-control','cas-control','output-completion-query')
+    unverified = @('unity-motion-sign-and-coverage','scene-depth-camera-match','pre-ui-composition','nr-per-frame-confirmation')
+    unavailable = @('prepared-camera-jitter','unity-internal-sr','nr-only-same-frame-comparison','integrated-frame-generation')
+}
+$buildManifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $output 'capabilities.json') -Encoding utf8

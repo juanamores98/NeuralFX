@@ -1,4 +1,10 @@
-# Evidencia de validación — 8 de septiembre de 2026
+# Evidencia actual e histórica
+
+La consolidación de septiembre introduce bridge build 4 / ABI 3 / IPC 4. Sus resultados y límites se registran en [CONSOLIDACION-2026-09.md](CONSOLIDACION-2026-09.md). No se ejecutó CS1 ni una GPU NVIDIA en esta entrega.
+
+**Todo lo que sigue es el registro histórico del repositorio. No corresponde a los binarios nuevos ni confirma sus entradas temporales.** Se conserva para comparar la combinación de control.
+
+## Evidencia de validación — 8 de septiembre de 2026
 
 Equipo local: Windows x64, RTX 5080, controlador 616.86. CS1 informa 1.21.1-f9. Los resultados corresponden a estas pruebas y este equipo.
 

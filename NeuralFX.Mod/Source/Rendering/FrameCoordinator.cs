@@ -3,7 +3,7 @@ namespace NeuralFX.Rendering
     internal sealed class FrameCoordinator
     {
         private static uint _nextEpoch;
-        private uint _frame;
+        private static uint _frame;
         public uint Epoch { get; private set; }
         public FrameCoordinator() { Recreate(); }
         public void Recreate() { unchecked { Epoch = ++_nextEpoch; if (Epoch == 0) Epoch = ++_nextEpoch; } }

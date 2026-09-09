@@ -1,6 +1,12 @@
 # Arquitectura y decisiones
 
-## Flujo actual
+## Contrato vigente: bridge build 4 / ABI 3 / IPC 4
+
+Consulta [la consolidación](CONSOLIDACION-2026-09.md) para los layouts y limitaciones. Un token de cámara enlaza la copia GPU de MV experimental y el consumo único del feeder. La ruta óptica conserva su textura, SRV y escalas. Los resets se confirman tras una query posterior al blit; esa señal no confirma NR ni Present.
+
+No se habilita jitter: falta preparación completa y contingencia. `AfterEverything` es la fase de captura experimental, no una garantía pre-UI. El Hub no recibe punteros GPU. El esquema siguiente describe la infraestructura conservada; NR permanece sin confirmar en el estado efectivo.
+
+## Flujo conservado
 
 ```text
 CS1 → frame final D3D11 → flujo óptico LumeniteFX

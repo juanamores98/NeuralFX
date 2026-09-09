@@ -268,7 +268,10 @@ namespace NeuralFX.Hub
         {
             if (_channel == null || sender is not Button button || !Enum.TryParse<CommandKind>(button.Tag?.ToString(), out var command)) return;
             _revision = Math.Max(_revision, _lastFrame.LastCommand) + 1;
-            _channel.Send(new TelemetryCommand { Revision = _revision, Kind = command, SessionId = _lastFrame.SessionId });
+            int work = 0; float sharpness = -1;
+            if (command == CommandKind.SetWorkResolution) work = new[] {100,85,66}[Math.Max(0,SessionWorkSelector.SelectedIndex)];
+            if (command == CommandKind.SetSharpness) sharpness = new[] {0f,.15f,.3f}[Math.Max(0,SessionSharpSelector.SelectedIndex)];
+            _channel.Send(new TelemetryCommand { Revision = _revision, Kind = command, SessionId = _lastFrame.SessionId, IntValue=work, FloatValue=sharpness });
             LogHub("Comando in-game enviado: " + command + " (#" + _revision + ")");
         }
 

@@ -24,6 +24,16 @@ class Program {
   for(uint caps=0;caps<128;caps++)Check(!FramePolicy.CanJitter(true,true,caps,false,true),"No jitter without preparation");
   Check(!FramePolicy.CanJitter(false,true,127,true,true),"Off jitter");Check(!FramePolicy.CanJitter(true,false,127,true,true),"No experimental consent");
   var frames=new FrameCoordinator();uint epoch=frames.Epoch;frames.Recreate();Check(FramePolicy.Newer(frames.Epoch,epoch),"Epoch monotonic");
+  Check(Marshal.SizeOf(typeof(NativeControls))==24,"Controls layout");
+  var modes=new CameraModeLease();camera.depthTextureMode=DepthTextureMode.Depth;modes.Acquire(camera);modes.Release();Check(camera.depthTextureMode==DepthTextureMode.Depth,"Exact original flags restored");
+  modes.Acquire(camera);camera.depthTextureMode=(DepthTextureMode)7;modes.Release();Check((int)camera.depthTextureMode==7&&modes.Conflict,"Later camera flags preserved");
+  var panel=new NeuralFX.UI.TelemetryPanel();panel.Toggle();Check(panel.Visible,"Panel opens");
+  var view=ColossalFramework.UI.UIView.GetAView();view.fixedWidth=320;view.fixedHeight=240;panel.Update("metrics","status","details","conflicts");
+  var root=view.GetComponentsInChildren<ColossalFramework.UI.UIPanel>()[0];Check(root.width<=320&&root.height<=240,"Panel fits small viewport");
+  var field=view.AddUIComponent<ColossalFramework.UI.UITextField>();field.containsFocus=true;Check(NeuralFX.UI.TelemetryPanel.HasTextFocus(),"Text focus prevents hotkey");field.containsFocus=false;Check(!NeuralFX.UI.TelemetryPanel.HasTextFocus(),"Hotkey released after edit");
+  NeuralFX.Options.OptionsPanel.Build(new ColossalFramework.UI.UIHelper());
+  var state=new TelemetryFrame {Flags=RuntimeFlags.CameraPresent|RuntimeFlags.PipelineRequested|RuntimeFlags.NativeConnected|RuntimeFlags.EvaluationSucceeded};
+  Check(SessionViewState.Summary(state).Contains("NR sin confirmar"),"NGX does not confirm NR");
   Console.WriteLine(checks+" mod contract checks passed (Unity doubles; no GPU/game validation).");
  }
 }
