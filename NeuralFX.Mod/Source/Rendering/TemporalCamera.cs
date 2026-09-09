@@ -46,7 +46,7 @@ namespace NeuralFX.Rendering
             };
             // Jitter intentionally stays zero: feeder has no prepared-frame/fallback contract.
             if (Bridge.Submit(ref frame)) _event.IssuePluginEvent(Bridge.RenderEvent, unchecked((int)frame.Frame));
-            else { _event.Clear(); _inputs.Release(); }
+            else { _event.Clear(); Bridge.CancelMotion(motion); _inputs.Release(); }
         }
         public void OnPostRender() { _projection.Restore(); }
         public void OnDisable()

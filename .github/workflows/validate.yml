@@ -25,8 +25,10 @@ jobs:
       - name: Hub and IPC tests (no game assemblies)
         run: dotnet test NeuralFX.Tests/NeuralFX.Tests.csproj -c Release -p:BuildMod=false --logger 'trx;LogFileName=hub.trx'
       - name: Mod contracts with Unity doubles
+        if: always()
         run: dotnet run --project tests/ModContracts/ModContracts.csproj -c Release
       - name: Build pinned feeder and native tests
+        if: always()
         shell: pwsh
         run: ./Native/build.ps1
       - uses: actions/upload-artifact@v4

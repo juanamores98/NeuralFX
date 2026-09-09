@@ -45,6 +45,7 @@ static void NeuralFxMotionComplete(uint32_t handle) {
         slot.reserved = false; if (slot.retiring) NeuralFxReleaseSlot(slot); return;
     }
 }
+NFX_EXPORT void NFX_CALL NeuralFX_CancelMotion(uint32_t handle) { NeuralFxMotionComplete(handle); }
 NFX_EXPORT void NFX_CALL NeuralFX_ReleaseMotion(uint32_t handle) {
     std::lock_guard<std::mutex> lock(nfx_inputs_lock);
     for (auto& slot : nfx_motion_slots) if (handle && slot.handle == handle) {

@@ -23,6 +23,7 @@ namespace NeuralFX
         private int _pid;
         private CommandResult _commandResult;
         private int _commandReason;
+        private uint _commandReset;
         public TelemetryFrame CurrentFrame { get; private set; }
         public string BridgeReason { get { return _bridge.Reason; } }
         public static void ToggleWindow() { if (_instance != null) _instance._panel.Toggle(); }
@@ -65,13 +66,13 @@ namespace NeuralFX
             if (ModSettings.EnableHotkey && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) &&
                 (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) && Input.GetKeyDown(KeyCode.N) && !UI.TelemetryPanel.HasTextFocus()) ToggleWindow();
             TelemetryCommand command;
-            if (_channel != null && _channel.TryReadCommand(out command) && command.Revision != _lastCommand)
+            if (_channel != null && _channel.TryReadCommand(out command) && FramePolicy.Newer(unchecked((uint)command.Revision), unchecked((uint)_lastCommand)))
             {
                 _commandResult = CommandResult.Accepted; _commandReason = 0;
                 if (command.ExpiresUtcTicks < System.DateTime.UtcNow.Ticks) { _commandResult = CommandResult.Rejected; _commandReason = 1; }
                 else if (command.Kind == CommandKind.TogglePanel) { ToggleWindow(); _commandResult = CommandResult.Applied; }
                 else if (command.Kind == CommandKind.ReapplyBuffers && ModSettings.ExperimentalOptIn) { EnsureCameraModes(); _commandResult = CommandResult.Applied; }
-                else if (command.Kind == CommandKind.ResetHistory && _temporal != null) RequestHistoryReset();
+                else if (command.Kind == CommandKind.ResetHistory && _temporal != null && ModSettings.PipelineEnabled) { RequestHistoryReset(); _commandReset = unchecked((uint)_temporal.ResetSerial); }
                 else if (command.Kind == CommandKind.EnablePipeline || command.Kind == CommandKind.DisablePipeline) {
                     if (SetPipelineEnabled(command.Kind == CommandKind.EnablePipeline)) _commandResult = CommandResult.Applied;
                     else { _commandResult = CommandResult.Rejected; _commandReason = 3; }
@@ -94,13 +95,14 @@ namespace NeuralFX
             }
             if (_bridge.Connected) flags |= RuntimeFlags.NativeConnected;
             bool recent = status.Frame > 0 && status.AgeMs < 2000;
-            if (recent && status.Result == 1) flags |= RuntimeFlags.EvaluationSucceeded;
+            if (recent && status.Result == 1 && ModSettings.PipelineEnabled) flags |= RuntimeFlags.EvaluationSucceeded;
             if (_temporal != null) _resetSerial = _temporal.ResetSerial;
             bool current = _temporal != null && result.Epoch == _temporal.Epoch && recent && ModSettings.PipelineEnabled;
             if (current && result.MotionProvider == 2) flags |= RuntimeFlags.NativeMotion;
             if (current && result.OutputCommitted > 0) flags |= RuntimeFlags.OutputCommitted;
             if (current && result.NrConfirmed != 0) flags |= RuntimeFlags.NrConfirmed;
             if (current && result.UiIsolated != 0) flags |= RuntimeFlags.UiIsolated;
+            if (_commandResult == CommandResult.Accepted && current && result.ResetSerial == _commandReset) _commandResult = CommandResult.Applied;
             CurrentFrame = new TelemetryFrame {
                 ProcessId = _pid, UtcTicks = System.DateTime.UtcNow.Ticks, Fps = _fps, FrameMs = _frameMs,
                 DisplayWidth = Screen.width, DisplayHeight = Screen.height, RenderWidth = _camera != null ? _camera.pixelWidth : 0,

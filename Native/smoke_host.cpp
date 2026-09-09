@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstdint>
+#include "neuralfx_contract.h"
 #pragma comment(lib, "d3d11.lib")
 
 int main(int argc, char** argv) {
@@ -28,20 +29,22 @@ int main(int argc, char** argv) {
     if (FAILED(hr)) return 2;
     ULONGLONG deadline = GetTickCount64() + 30000;
     unsigned frame = 0;
-    struct Frame { uint32_t size, version, frame, reset, width, height; float jitterX, jitterY; };
+    using Frame = NeuralFxFrameV3;
     struct Status { uint32_t size, version, capabilities, frame, reset, evaluations, width, height; int32_t result; uint32_t age; };
     auto addon = GetModuleHandleW(L"dlss5-feed.addon64");
-    auto submit = reinterpret_cast<int(__cdecl*)(const Frame*)>(GetProcAddress(addon, "NeuralFX_SubmitFrame"));
+    auto submit = reinterpret_cast<int(__cdecl*)(const Frame*, uint32_t)>(GetProcAddress(addon, "NeuralFX_SubmitFrameV3"));
+    auto enable = reinterpret_cast<int(__cdecl*)(uint32_t)>(GetProcAddress(addon, "NeuralFX_SetEnabled"));
     auto getEvent = reinterpret_cast<void*(__cdecl*)()>(GetProcAddress(addon, "NeuralFX_GetRenderEvent"));
     auto getStatus = reinterpret_cast<int(__cdecl*)(Status*)>(GetProcAddress(addon, "NeuralFX_GetStatus"));
-    if (!submit || !getEvent || !getStatus) return 5;
+    if (!submit || !getEvent || !getStatus || !enable) return 5;
     auto renderEvent = reinterpret_cast<void(__stdcall*)(int)>(getEvent());
     while (GetTickCount64() < deadline) {
         MSG msg; while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
         float color[4] = {0.2f + 0.1f * std::sin(frame * 0.01f), 0.3f, 0.4f, 1.0f};
         context->OMSetRenderTargets(1, &target, nullptr); context->ClearRenderTargetView(target, color);
-        Frame metadata = {sizeof(Frame), 1, frame + 1, frame < 120 ? 7u : 8u, width, height, 0, 0};
-        if (!submit(&metadata)) return 6;
+        Frame metadata = {sizeof(Frame), 3, frame + 1, frame < 120 ? 7u : 8u, width, height, 0, 0, 1, 1, 0, 0, 1, 1, NFX_MAGIC, 0};
+        enable(1);
+        if (!submit(&metadata, sizeof(metadata))) return 6;
         renderEvent(frame + 1);
         hr = swapchain->Present(0, 0); if (FAILED(hr)) break;
         ++frame; Sleep(8);

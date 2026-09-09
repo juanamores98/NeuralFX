@@ -186,7 +186,7 @@ public sealed class UninstallTests : IDisposable
         foreach (string arg in new[] { "-NoProfile", "-NonInteractive", "-Command",
             "$ErrorActionPreference='Stop'; New-Item -ItemType Junction -Path '" + link.Replace("'", "''") + "' -Target '" + target.Replace("'", "''") + "' | Out-Null" }) info.ArgumentList.Add(arg);
         using var process = Process.Start(info)!;
-        if (!process.WaitForExit(10000)) { process.Kill(); throw new TimeoutException("Junction creation did not finish."); }
+        if (!process.WaitForExit(30000)) { process.Kill(); throw new TimeoutException("Junction creation did not finish."); }
         Assert.True(process.ExitCode == 0, process.StandardError.ReadToEnd());
     }
     public void Dispose() => Directory.Delete(_root, true);

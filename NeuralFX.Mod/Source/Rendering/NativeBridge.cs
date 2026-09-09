@@ -38,7 +38,7 @@ namespace NeuralFX.Rendering
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ReserveDelegate(uint handle);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void ReleaseDelegate(uint handle);
         private SubmitDelegate _submit; private StatusDelegate _status; private ResultDelegate _result;
-        private EnableDelegate _enable; private RegisterDelegate _register; private ReserveDelegate _reserve; private ReleaseDelegate _release;
+        private EnableDelegate _enable; private RegisterDelegate _register; private ReserveDelegate _reserve; private ReleaseDelegate _release, _cancel;
         public NativeCapabilities Capabilities { get; private set; }
         public string Reason { get; private set; }
         public IntPtr RenderEvent { get; private set; }
@@ -64,6 +64,7 @@ namespace NeuralFX.Rendering
             _register = (RegisterDelegate)Resolve(module, "NeuralFX_RegisterMotion", typeof(RegisterDelegate));
             _reserve = (ReserveDelegate)Resolve(module, "NeuralFX_ReserveMotion", typeof(ReserveDelegate));
             _release = (ReleaseDelegate)Resolve(module, "NeuralFX_ReleaseMotion", typeof(ReleaseDelegate));
+            _cancel = (ReleaseDelegate)Resolve(module, "NeuralFX_CancelMotion", typeof(ReleaseDelegate));
             RenderEvent = callback != null ? callback() : IntPtr.Zero;
             Capabilities = caps; Reason = Connected ? "Puente ABI 3 negociado; NR sin confirmar" : "Exports incompletos";
             return Connected;
@@ -71,6 +72,7 @@ namespace NeuralFX.Rendering
         public bool SetEnabled(bool enabled) { return Connected && _enable(enabled ? 1u : 0u) == 1; }
         public uint RegisterMotion(IntPtr texture, uint camera, uint epoch) { return Connected && _register != null ? _register(texture, camera, epoch) : 0; }
         public bool ReserveMotion(uint handle) { return Connected && _reserve != null && _reserve(handle) == 1; }
+        public void CancelMotion(uint handle) { if (_cancel != null && handle != 0) _cancel(handle); }
         public void ReleaseMotion(uint handle) { if (_release != null && handle != 0) _release(handle); }
         public bool Submit(ref NativeFrame frame) { return Connected && _submit(ref frame, 64) == 1; }
         public NativeStatus ReadStatus()

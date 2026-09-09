@@ -145,6 +145,13 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Native test compilation failed.' }
     & .\build\bridge-tests.exe
     if ($LASTEXITCODE -ne 0) { throw 'Native bridge tests failed.' }
+    $motionSource = Join-Path $nativeRoot 'motion_tests.cpp'
+    if ($vs) {
+        & cmd.exe /d /c ('call "' + $env:VCVARSALL + '" x64 && cl.exe /nologo /EHsc /W3 /std:c++20 /Fobuild/ /Febuild/motion-tests.exe "' + $motionSource + '"')
+    } else { & cl.exe /nologo /EHsc /W3 /std:c++20 /Fobuild/ /Febuild/motion-tests.exe $motionSource }
+    if ($LASTEXITCODE -ne 0) { throw 'Motion fixture compilation failed.' }
+    & .\build\motion-tests.exe
+    if ($LASTEXITCODE -ne 0) { throw 'Motion descriptor fixture failed.' }
     if ($SmokeHarness) {
         $smokeSource = Join-Path $nativeRoot 'smoke_host.cpp'
         if ($vs) {

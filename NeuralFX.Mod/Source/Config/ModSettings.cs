@@ -29,6 +29,7 @@ namespace NeuralFX.Config
     {
         private static ModSettingsData _data = new ModSettingsData { SchemaVersion = 3 };
         public static string LastSaveError { get; private set; }
+        private static bool _readOnly;
         public static bool PipelineEnabled { get { return _data.PipelineEnabled; } set { _data.PipelineEnabled = value; } }
         public static bool ExperimentalOptIn { get { return _data.ExperimentalOptIn; } set { _data.ExperimentalOptIn = value; } }
         public static bool EnableRenderTrace { get { return _data.EnableRenderTrace; } set { _data.EnableRenderTrace = value; } }
@@ -109,7 +110,7 @@ namespace NeuralFX.Config
                         var loaded = serializer.Deserialize(reader) as ModSettingsData;
                         if (loaded != null)
                         {
-                            if (loaded.SchemaVersion > 3) throw new InvalidDataException("Configuración de una versión posterior: no se sobrescribe.");
+                            if (loaded.SchemaVersion > 3) { _readOnly = true; throw new InvalidDataException("Configuración de una versión posterior: no se sobrescribe."); }
                             _data = Migrate(loaded);
                         }
                     }
@@ -125,6 +126,7 @@ namespace NeuralFX.Config
         {
             try
             {
+                if (_readOnly) throw new InvalidDataException("Archivo de versión posterior: se conserva sin cambios.");
                 string path = GetConfigPath();
                 string dir = Path.GetDirectoryName(path);
                 if (!Directory.Exists(dir))
