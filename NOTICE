@@ -30,3 +30,5 @@ Componentes descargados o aportados aparte:
 
 NVIDIA, DLSS, AMD, Cities: Skylines, Colossal Order y Paradox Interactive
 son nombres o marcas de sus titulares. NeuralFX es independiente.
+
+- dlss5-bridge (NIGos), MIT: cierre en memoria de la ruta del driver al rasgo 18 de NGX, portado en Native/neuralfx_ngx.h. Ver licenses/DLSS5-Bridge-MIT.txt.

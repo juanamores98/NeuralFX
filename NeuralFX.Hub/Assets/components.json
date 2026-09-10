@@ -39,24 +39,24 @@
   },
   {
     "Id": "renodx_dlss5",
-    "DisplayName": "RenoDX DLSS5 3.3.4",
-    "Description": "Versión del control histórico a 4K. No acredita la combinación ABI 3 actual; 4.55/4.70 fallaron en aquella validación.",
+    "DisplayName": "RenoDX DLSS5 4.60",
+    "Description": "Generación 4.6: pestaña propia en ReShade con intensidad, tono global y local, estructura, máscara de personajes y corrección de UI. Requiere que el puente cierre la ruta del driver al rasgo 18; sin eso revienta en todo driver 616.64 o posterior.",
     "Category": 1,
     "TargetRelativePath": "renodx-dlss5.addon64",
     "SourceType": "PublicDownload",
     "CanAutoDownload": true,
-    "DownloadUrl": "https://github.com/RankFTW/rhi-repo/releases/download/renodx-dlss5-3.3.4/renodx-dlss5_3.3.4.zip",
+    "DownloadUrl": "https://github.com/RankFTW/rhi-repo/releases/download/renodx-dlss5-4.60/renodx-dlss5_4.60.zip",
     "OfficialWebUrl": "https://github.com/RankFTW/rhi-repo/releases",
     "ReleaseRepository": "RankFTW/rhi-repo",
     "ReleaseTagPrefix": "renodx-dlss5-",
     "DownloadType": "ZipExtract",
-    "ExpectedSha256": "9e23b4d4b896060ed989c92dff211ad8365892c3872cb41b219f3c600d6081d4",
-    "Version": "renodx-dlss5-3.3.4",
+    "ExpectedSha256": "ad30994ba898f3eed5a4c7953927db9759c680a71bc9d9855cac93e9ccc1e3c6",
+    "Version": "renodx-dlss5-4.60",
     "PackageFiles": {
       "renodx-dlss5.addon64": "renodx-dlss5.addon64"
     },
     "ExpectedFileSha256": {
-      "renodx-dlss5.addon64": "25dd0642bec96fc929456815651824356583da33678ee2448d70ff3d4d934305"
+      "renodx-dlss5.addon64": "245c06137ad13b1ca03afaad5100c1e8f0dce8c11fe50a9272ea562f33cea601"
     }
   },
   {

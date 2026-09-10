@@ -1,5 +1,6 @@
 // Registered in-process D3D11 resources; never accepted through Hub IPC. MIT-0.
 #pragma once
+#include "neuralfx_ngx.h"
 #include <d3d11.h>
 #include "neuralfx_bridge.h"
 struct NeuralFxMotionSlot {

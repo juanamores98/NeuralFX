@@ -189,7 +189,30 @@ static void NeuralFxFinishEffects(reshade::api::effect_runtime* rt, reshade::api
 }
 static void DrawOverlay(reshade::api::effect_runtime *rt)
 '@
-$source = Replace-Once $source '        reshade::register_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' ('        reshade::register_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' + "`n" + '        reshade::register_event<reshade::addon_event::reshade_begin_effects>(NeuralFxBeginEffects);' + "`n" + '        reshade::register_event<reshade::addon_event::reshade_finish_effects>(NeuralFxFinishEffects);')
+$source = Replace-Once $source '        reshade::register_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' ('        reshade::register_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' + "`n" + '        reshade::register_event<reshade::addon_event::reshade_begin_effects>(NeuralFxBeginEffects);' + "`n" + '        reshade::register_event<reshade::addon_event::reshade_finish_effects>(NeuralFxFinishEffects);' + "`n" + @'
+        {
+            // Desde 32.0.16.1664 el loader del driver conduce el rasgo 18 a
+            // nvngx_dlssnr.dll y el evaluate revienta dentro de D3D12Core. Cerrar esa
+            // ruta en este proceso devuelve el comportamiento de 1656, que es el que
+            // funciona. Portado de dlss5-bridge (NIGos), MIT.
+            void *neuralfx_ngx_table = nullptr;
+            switch (NeuralFxCloseDriverNeuralRoute(&neuralfx_ngx_table))
+            {
+            case NFX_NGX_ROUTE_CLOSED:
+                Log("[neuralfx] ruta del driver al rasgo 18 cerrada en este proceso: la entrada 18 de la tabla del loader en %p decia \"dlssnr\" y ahora no dice nada, como en 32.0.16.1656. El consumidor conduce el rasgo el mismo. Nada cambia en disco.", neuralfx_ngx_table);
+                break;
+            case NFX_NGX_ROUTE_UNTOUCHED:
+                Log("[neuralfx] el loader NGX no tiene una entrada \"dlssnr\" reconocible, asi que no conduce neural rendering por su cuenta y no hay nada que cerrar.");
+                break;
+            case NFX_NGX_ROUTE_NO_LOADER:
+                Log("[neuralfx] no hay _nvngx.dll cargado ni registrado; el driver traera el suyo mas tarde.");
+                break;
+            case NFX_NGX_ROUTE_LOCKED:
+                Log("[neuralfx] la tabla del loader esta en %p pero no se pudo hacer escribible (%lu); el driver conserva su ruta.", neuralfx_ngx_table, GetLastError());
+                break;
+            }
+        }
+'@)
 $source = Replace-Once $source '        reshade::unregister_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' ('        reshade::unregister_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' + "`n" + '        reshade::unregister_event<reshade::addon_event::reshade_begin_effects>(NeuralFxBeginEffects);' + "`n" + '        reshade::unregister_event<reshade::addon_event::reshade_finish_effects>(NeuralFxFinishEffects);')
 Set-Content -LiteralPath (Join-Path $upstreamRoot 'src/dlss5-feed.cpp') -Value $source -Encoding utf8
 Get-ChildItem -LiteralPath $nativeRoot -Filter 'neuralfx_*.h' | Copy-Item -Destination (Join-Path $upstreamRoot 'src') -Force
