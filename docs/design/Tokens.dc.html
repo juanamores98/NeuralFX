@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+    a { color: #4EC9B0; } a:hover { color: #6FE0C9; }
+    .h { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6E6E73; }
+    .sw { display: flex; align-items: center; gap: 10px; }
+    .chip { width: 26px; height: 26px; border-radius: 3px; border: 1px solid #3E3E42; flex: none; }
+    .nm { font-size: 12px; color: #F1F1F1; }
+    .hx { font-family: Consolas, "Cascadia Mono", monospace; font-size: 11px; color: #6E6E73; }
+    .st { display: grid; grid-template-columns: 14px 210px minmax(0, 1fr); gap: 0 12px; padding: 8px 0; border-bottom: 1px solid #262629; align-items: baseline; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; }
+  </style>
+</helmet>
+<div style="width: 900px; height: 700px; box-sizing: border-box; background: #1E1E1E; color: #F1F1F1; padding: 34px 38px; overflow: hidden; display: flex; flex-direction: column; gap: 24px">
+
+  <div>
+    <div style="font-size: 22px; font-weight: 600; letter-spacing: -0.01em">Sistema visual</div>
+    <div style="font-size: 12px; color: #9D9D9D; margin-top: 6px">Un acento, dos superficies, una escala tipográfica. Hub y panel en ciudad comparten vocabulario.</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 34px">
+
+    <!-- Hub -->
+    <div style="display: flex; flex-direction: column; gap: 13px">
+      <span class="h">Hub · WPF</span>
+      <div class="sw"><span class="chip" style="background: #1E1E1E"></span><span class="nm">Fondo</span><span class="hx">#1E1E1E</span></div>
+      <div class="sw"><span class="chip" style="background: #232325"></span><span class="nm">Superficie</span><span class="hx">#232325</span></div>
+      <div class="sw"><span class="chip" style="background: #2A2A2D"></span><span class="nm">Filete</span><span class="hx">#2A2A2D</span></div>
+      <div class="sw"><span class="chip" style="background: #3E3E42"></span><span class="nm">Borde de control</span><span class="hx">#3E3E42</span></div>
+      <div class="sw"><span class="chip" style="background: #4EC9B0; border-color: #4EC9B0"></span><span class="nm">Acento</span><span class="hx">#4EC9B0</span></div>
+      <div class="sw"><span class="chip" style="background: #CE9178; border-color: #CE9178"></span><span class="nm">Atención</span><span class="hx">#CE9178</span></div>
+      <div class="sw"><span class="chip" style="background: #F44747; border-color: #F44747"></span><span class="nm">Destructivo</span><span class="hx">#F44747</span></div>
+      <div class="sw"><span class="chip" style="background: #F1F1F1; border-color: #F1F1F1"></span><span class="nm">Texto</span><span class="hx">#F1F1F1</span></div>
+      <div class="sw"><span class="chip" style="background: #9D9D9D; border-color: #9D9D9D"></span><span class="nm">Texto secundario</span><span class="hx">#9D9D9D</span></div>
+      <div class="sw"><span class="chip" style="background: #6E6E73; border-color: #6E6E73"></span><span class="nm">Texto de apoyo</span><span class="hx">#6E6E73</span></div>
+    </div>
+
+    <!-- Colossal -->
+    <div style="display: flex; flex-direction: column; gap: 13px">
+      <span class="h">En ciudad · Colossal UI</span>
+      <div class="sw"><span class="chip" style="background: #2E3840"></span><span class="nm">Panel</span><span class="hx">#2E3840</span></div>
+      <div class="sw"><span class="chip" style="background: #3E4A54"></span><span class="nm">Filete</span><span class="hx">#3E4A54</span></div>
+      <div class="sw"><span class="chip" style="background: #4A5866"></span><span class="nm">Botón</span><span class="hx">#4A5866</span></div>
+      <div class="sw"><span class="chip" style="background: #7FD8C0; border-color: #7FD8C0"></span><span class="nm">Acento</span><span class="hx">#7FD8C0</span></div>
+      <div class="sw"><span class="chip" style="background: #DCE4EA; border-color: #DCE4EA"></span><span class="nm">Texto</span><span class="hx">#DCE4EA</span></div>
+      <div class="sw"><span class="chip" style="background: #93A2AE; border-color: #93A2AE"></span><span class="nm">Texto secundario</span><span class="hx">#93A2AE</span></div>
+
+      <div style="margin-top: 8px; border-top: 1px solid #262629; padding-top: 14px; display: flex; flex-direction: column; gap: 9px">
+        <span class="h">Tipografía y ritmo</span>
+        <div style="font-size: 12px; color: #9D9D9D; line-height: 1.8">
+          Segoe UI · 24 / 15 / 13 / 12 / 11<br>
+          Consolas para rutas, hashes y versiones<br>
+          Cifras tabulares en toda métrica<br>
+          Radio 3 px · filete 1 px · sin sombras salvo el panel flotante<br>
+          Rejilla de 4 px; respiro de sección 26–34 px
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vocabulario de estado -->
+  <div style="border-top: 1px solid #2A2A2D; padding-top: 18px">
+    <span class="h">Vocabulario de estado — mismo texto en Hub, panel y opciones</span>
+    <div style="margin-top: 12px">
+      <div class="st"><span class="dot" style="background: #4EC9B0"></span><span style="font-size: 12px; color: #F1F1F1">NR confirmado</span><span style="font-size: 12px; color: #6E6E73">Único estado que afirma imagen neural. Hoy no se alcanza.</span></div>
+      <div class="st"><span class="dot" style="background: #4EC9B0"></span><span style="font-size: 12px; color: #F1F1F1">Portador NGX operativo</span><span style="font-size: 12px; color: #6E6E73">Llamada aceptada y comandos enviados. NR sin confirmar.</span></div>
+      <div class="st"><span class="dot" style="background: #CE9178"></span><span style="font-size: 12px; color: #F1F1F1">Esperando evaluación</span><span style="font-size: 12px; color: #6E6E73">El portador aún no ha evaluado un frame.</span></div>
+      <div class="st"><span class="dot" style="background: #CE9178"></span><span style="font-size: 12px; color: #F1F1F1">Bypass</span><span style="font-size: 12px; color: #6E6E73">Puente ausente, incompatible o error del backend. El juego se ve sin tocar.</span></div>
+      <div class="st" style="border-bottom: 0"><span class="dot" style="background: #6E6E73"></span><span style="font-size: 12px; color: #F1F1F1">Preparado · Desactivado</span><span style="font-size: 12px; color: #6E6E73">Sin ciudad, o apagado por el usuario.</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

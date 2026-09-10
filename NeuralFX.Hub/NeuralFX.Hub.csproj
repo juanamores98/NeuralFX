@@ -21,7 +21,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NeuralFX.Mod\NeuralFX.Mod.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Condition="'$(BuildMod)' != 'false'" />
+    <!-- Compilar el Hub (o las pruebas) construye el mod para incrustarlo, pero no lo despliega:
+         el despliegue en caliente pertenece a quien compila NeuralFX.Mod. -->
+    <ProjectReference Include="..\NeuralFX.Mod\NeuralFX.Mod.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" AdditionalProperties="DeployMod=false" Condition="'$(BuildMod)' != 'false'" />
   </ItemGroup>
 
   <Target Name="RequireNativeBridgeForPublish" BeforeTargets="Publish">

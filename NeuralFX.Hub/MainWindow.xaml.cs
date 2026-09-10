@@ -42,11 +42,14 @@ namespace NeuralFX.Hub
         private static string ModDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Colossal Order", "Cities_Skylines", "Addons", "Mods", "NeuralFX");
         private sealed record OperationResult(bool? Success, string Title, string Detail);
         private string? GameDirectory => _hardwareInfo.GameFound ? Path.GetDirectoryName(_hardwareInfo.GameExePath) : null;
+        private static readonly string[] PresetNames = { "Nativo", "Equilibrado", "Coste reducido", "Fotografía" };
+        public string HubVersion { get; } = "Hub " + (typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "");
 
         public MainWindow()
         {
             InitializeComponent();
             _installEngine = new(_dependencyManager);
+            MainTabs.DataContext = this;
             PresetSelector.SelectedIndex = Enum.IsDefined(_preferences.Preset) ? (int)_preferences.Preset : 0;
             _liveTimer.Tick += (_, _) => ReadTelemetry();
             _backgroundTimer.Tick += async (_, _) => await PollBackgroundAsync();
@@ -76,7 +79,7 @@ namespace NeuralFX.Hub
             {
                 _hardwareInfo = await Task.Run(() => _diagnosticsService.RunDiagnostics(_preferences.GameExecutable));
                 TxtGpuName.Text = _hardwareInfo.GpuName;
-                TxtArchitecture.Text = "Inventario preliminar del registro. El LUID del dispositivo del juego aparece en Inicio; SR, DLAA y NR requieren consultas independientes.";
+                TxtArchitecture.Text = "Inventario preliminar del registro. El LUID del dispositivo del juego aparece en Estado; SR, DLAA y NR requieren consultas independientes.";
                 TxtBadgeGpu.Text = _hardwareInfo.DetectedArchitecture switch
                 {
                     GpuArchitecture.Blackwell => "NVIDIA RTX BLACKWELL",
@@ -85,12 +88,12 @@ namespace NeuralFX.Hub
                     _ => _hardwareInfo.IsNvidia ? "NVIDIA RTX / GTX" : "GPU NO NVIDIA"
                 };
                 TxtVram.Text = _hardwareInfo.VramBytes == 0 ? "Sin lectura disponible" : _hardwareInfo.VramDisplay;
-                TxtBadgeVram.Text = "VRAM DEDICADA";
-                TxtDriverVer.Text = "Driver NVIDIA: " + _hardwareInfo.ParsedDriverVersion;
-                TxtDriverRaw.Text = "Driver SO: " + _hardwareInfo.RawDriverVersion;
-                TxtBadgeDriver.Text = "CONTROLADOR";
+                TxtBadgeVram.Text = "";
+                TxtDriverVer.Text = _hardwareInfo.ParsedDriverVersion;
+                TxtDriverRaw.Text = "Versión del sistema: " + _hardwareInfo.RawDriverVersion;
+                TxtBadgeDriver.Text = "";
                 TxtGameExe.Text = _hardwareInfo.GameFound ? _hardwareInfo.GameExePath : _preferences.GameExecutable ?? "No localizado automáticamente. Usa 'Elegir Cities.exe'.";
-                TxtWritePerm.Text = !_hardwareInfo.GameFound ? "N/A" : _hardwareInfo.CanWriteGameDir ? "Correcto (Escritura habilitada)" : "Bloqueado (Requiere permisos de administrador)";
+                TxtWritePerm.Text = !_hardwareInfo.GameFound ? "N/A" : _hardwareInfo.CanWriteGameDir ? "Concedido" : "Bloqueado · requiere permisos de administrador";
                 TxtAppLocations.Text = "• Hub: " + AppContext.BaseDirectory + "\n• Mod de Unity: " +
                     (File.Exists(Path.Combine(ModDirectory, "NeuralFX.dll")) ? "Detectado en Addons/Mods/NeuralFX (Activar en Gestor de contenido de CS1)\n" : "Pendiente de instalación (Se despliega automáticamente al pulsar Instalar)\n") +
                     "• Almacén local de runtimes: " + _dependencyManager.CacheDirectory;
@@ -121,7 +124,7 @@ namespace NeuralFX.Hub
 
         private void UpdateProcessState()
         {
-            TxtGameProcess.Text = _hardwareInfo.IsGameRunning ? "EN EJECUCIÓN (Cierra Cities: Skylines para modificar archivos)" : "CERRADO (Listo para instalar o desinstalar)";
+            TxtGameProcess.Text = _hardwareInfo.IsGameRunning ? "En ejecución · ciérralo para modificar archivos" : "Cerrado · listo para instalar o desinstalar";
             TxtGameProcess.Foreground = (Brush)FindResource(_hardwareInfo.IsGameRunning ? "Danger" : "Success");
         }
 
@@ -170,9 +173,11 @@ namespace NeuralFX.Hub
             if (GameDirectory is not string root)
             {
                 TxtGameStatus.Text = "JUEGO NO LOCALIZADO";
-                PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(192, 57, 43));
+                PillGameStatus.Background = (Brush)FindResource("Danger");
                 TxtPipelineStatusTitle.Text = "Cities.exe no encontrado";
-                TxtPipelineStatusSubtitle.Text = "Selecciona la carpeta o el ejecutable Cities.exe en la pestaña 'Diagnóstico'.";
+                TxtPipelineStatusSubtitle.Text = "Elige el ejecutable Cities.exe en Sistema para continuar.";
+                TxtInstallHint.Text = "Sin la ruta del juego no se puede instalar ni verificar nada.";
+                TxtComponentsSummary.Text = "Componentes";
                 BtnInstall.IsEnabled = false;
                 BtnUninstall.IsEnabled = false;
                 return;
@@ -186,36 +191,43 @@ namespace NeuralFX.Hub
             if (isVerified)
             {
                 TxtGameStatus.Text = "ARCHIVOS VERIFICADOS";
-                PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(39, 174, 96));
+                PillGameStatus.Background = (Brush)FindResource("Accent");
                 TxtPipelineStatusTitle.Text = "Archivos instalados y verificados";
-                TxtPipelineStatusSubtitle.Text = "Instalación verificada. La ejecución del portador y de NR se comprueba por separado al cargar una ciudad.";
-                BtnInstall.Content = "Actualizar / Reinstalar";
-                BtnInstall.Background = new SolidColorBrush(Color.FromRgb(41, 128, 185));
+                TxtPipelineStatusSubtitle.Text = "Los 19 archivos coinciden con el registro. Que el portador y NR se ejecuten se comprueba por separado al cargar una ciudad.";
+                BtnInstall.Content = guidance.InstallLabel;
                 BtnInstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && guidance.CanInstall;
                 BtnUninstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && _hardwareInfo.CanWriteGameDir;
             }
             else if (isLegacyOrIncomplete)
             {
                 TxtGameStatus.Text = "INSTALACIÓN INCOMPLETA";
-                PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(211, 84, 0));
-                TxtPipelineStatusTitle.Text = "Instalación Incompleta o con Componentes Desactualizados";
-                TxtPipelineStatusSubtitle.Text = "Se detectaron archivos en el juego que requieren actualización o faltan componentes. Pulsa 'Reparar' para completarlo.";
-                BtnInstall.Content = "Reparar / Completar Instalación";
-                BtnInstall.Background = new SolidColorBrush(Color.FromRgb(211, 84, 0));
+                PillGameStatus.Background = (Brush)FindResource("Warning");
+                TxtPipelineStatusTitle.Text = "Instalación incompleta o antigua";
+                TxtPipelineStatusSubtitle.Text = "Hay archivos en el juego que no coinciden con el catálogo actual. Actualizarlos conserva una copia verificada del estado previo.";
+                BtnInstall.Content = guidance.InstallLabel;
                 BtnInstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && guidance.CanInstall;
                 BtnUninstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && _hardwareInfo.CanWriteGameDir;
             }
             else
             {
-                TxtGameStatus.Text = "NO INSTALADO (VANILLA)";
-                PillGameStatus.Background = new SolidColorBrush(Color.FromRgb(74, 74, 79));
-                TxtPipelineStatusTitle.Text = "Sin instalación NeuralFX detectada";
-                TxtPipelineStatusSubtitle.Text = "No se detectaron archivos gestionados de NeuralFX. Revisa el plan antes de instalar.";
-                BtnInstall.Content = "Instalar en el Juego";
-                BtnInstall.Background = new SolidColorBrush(Color.FromRgb(39, 174, 96));
+                TxtGameStatus.Text = "SIN INSTALAR";
+                PillGameStatus.Background = (Brush)FindResource("TextFaint");
+                TxtPipelineStatusTitle.Text = "Sin instalación de NeuralFX";
+                TxtPipelineStatusSubtitle.Text = "No hay archivos gestionados en la carpeta del juego. Antes de escribir nada verás la lista completa de cambios.";
+                BtnInstall.Content = guidance.InstallLabel;
                 BtnInstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && guidance.CanInstall;
                 BtnUninstall.IsEnabled = false;
             }
+
+            TxtInstallHint.Text = _hardwareInfo.IsGameRunning
+                ? "Cierra Cities: Skylines para poder escribir en su carpeta."
+                : !_hardwareInfo.CanWriteGameDir ? "Sin permiso de escritura en la carpeta del juego."
+                : !guidance.CanInstall ? guidance.Next
+                : "El juego debe seguir cerrado mientras se escriben los archivos.";
+
+            TxtComponentsSummary.Text = guidance.Total == 0
+                ? "Componentes"
+                : $"Componentes · {guidance.Ready} de {guidance.Total} listos para instalar";
 
             BtnDownloadAllPublic.IsEnabled = _dependencies.Any(x => x.CanDownload);
             BtnAutoDetectDownloads.IsEnabled = _dependencies.Any(x => x.CanImport && !x.IsReady);
@@ -243,9 +255,11 @@ namespace NeuralFX.Hub
         {
             if (_channel == null || !_channel.TryRead(out var frame) || frame.ProcessId != _pid || !TelemetryStatus.IsFresh(frame, DateTime.UtcNow))
             {
-                TxtTelemetry.Text = _pid == 0 ? "Juego cerrado." : "Sin telemetría reciente · asegúrate de activar NeuralFX en el Gestor de contenido de Cities: Skylines.";
-                TxtSessionSummary.Text = _pid == 0 ? "Juego cerrado" : "Esperando mod in-game...";
-                TxtSessionHint.Text = _pid == 0 ? "Inicia el juego para monitorizar el rendimiento." : "Activa el mod y abre una ciudad.";
+                TxtTelemetry.Text = _pid == 0 ? "Juego cerrado." : "Sin telemetría reciente. Activa NeuralFX en el Gestor de contenido y abre una ciudad.";
+                TxtSessionSummary.Text = _pid == 0 ? "Juego cerrado" : "Esperando al mod en ciudad";
+                TxtSessionHint.Text = _pid == 0 ? "Abre Cities: Skylines para recibir métricas." : "El proceso está en marcha; el mod todavía no publica telemetría.";
+                PillSession.Background = (Brush)FindResource("TextFaint");
+                TxtMetricFps.Text = TxtMetricFrame.Text = TxtMetricWork.Text = TxtMetricReset.Text = "—";
                 TelemetryCommands.IsEnabled = false; return;
             }
             TelemetryCommands.IsEnabled = true;
@@ -254,11 +268,44 @@ namespace NeuralFX.Hub
             TxtTelemetry.Text = TelemetryStatus.Describe(frame);
             TxtSessionSummary.Text = SessionViewState.Summary(frame);
             TxtSessionHint.Text = "NGX, NR y salida incorporada son estados distintos. El tiempo mostrado es el intervalo del juego, no el coste GPU de NR.";
+            PillSession.Background = (Brush)FindResource(SessionBrushKey(frame));
+            TxtMetricFps.Text = frame.Fps.ToString("F1");
+            TxtMetricFrame.Text = frame.FrameMs.ToString("F2") + " ms";
+            TxtMetricWork.Text = frame.RenderWidth > 0 && frame.WorkWidth > 0
+                ? Math.Round(100.0 * frame.WorkWidth / frame.RenderWidth) + "%"
+                : "—";
+            TxtMetricReset.Text = frame.ResetCount + " / " + frame.CameraCuts;
+
+            bool running = SessionViewState.Has(frame, RuntimeFlags.PipelineRequested);
+            BtnPipelineToggle.Content = running ? "Desactivar NeuralFX" : "Activar NeuralFX";
+            BtnPipelineToggle.Tag = running ? "DisablePipeline" : "EnablePipeline";
+        }
+
+        // El mismo vocabulario de estado que SessionViewState.Summary, en color.
+        private static string SessionBrushKey(TelemetryFrame frame)
+        {
+            if (!SessionViewState.Has(frame, RuntimeFlags.CameraPresent)) return "TextFaint";
+            if (!SessionViewState.Has(frame, RuntimeFlags.PipelineRequested)) return "TextFaint";
+            if (!SessionViewState.Has(frame, RuntimeFlags.NativeConnected) || frame.BackendError != 0) return "Warning";
+            if (SessionViewState.Has(frame, RuntimeFlags.NrConfirmed)) return "Accent";
+            return SessionViewState.Has(frame, RuntimeFlags.EvaluationSucceeded) ? "Accent" : "Warning";
         }
 
         private void BtnTelemetryCommand_Click(object sender, RoutedEventArgs e)
         {
-            if (_channel == null || sender is not Button button || !Enum.TryParse<CommandKind>(button.Tag?.ToString(), out var command)) return;
+            if (sender is Button button) SendTelemetryCommand(button.Tag?.ToString());
+        }
+
+        // Los segmentados aplican al cambiar la selección: no hacen falta botones "Aplicar".
+        private void SessionControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded || sender is not ListBox list || !list.IsEnabled) return;
+            SendTelemetryCommand(list.Tag?.ToString());
+        }
+
+        private void SendTelemetryCommand(string? tag)
+        {
+            if (_channel == null || !Enum.TryParse<CommandKind>(tag, out var command)) return;
             _revision = Math.Max(_revision, _lastFrame.LastCommand) + 1;
             int work = 0; float sharpness = -1;
             if (command == CommandKind.SetWorkResolution) work = new[] {100,85,66}[Math.Max(0,SessionWorkSelector.SelectedIndex)];
@@ -364,7 +411,7 @@ namespace NeuralFX.Hub
                 try { _preferences.Save(); } catch (Exception ex) { LogHub("No se pudo recordar el preset: " + ex.Message); }
                 _integrity.Invalidate();
 
-                string presetName = (PresetSelector.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? preset.ToString();
+                string presetName = (int)preset >= 0 && (int)preset < PresetNames.Length ? PresetNames[(int)preset] : preset.ToString();
                 return new(true, "Pipeline instalado y verificado", "Componentes aplicados correctamente con perfil: " + presetName + ".\nActualiza también el mod con Install-NeuralFX.ps1 del paquete, reinicia Cities: Skylines y valida una ciudad.");
             });
         }
@@ -450,7 +497,7 @@ namespace NeuralFX.Hub
         private void BtnOpenDownloads_Click(object sender, RoutedEventArgs e) => OpenLocation(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"));
         private void BtnOpenCache_Click(object sender, RoutedEventArgs e) => OpenLocation(_dependencyManager.CacheDirectory);
         private void BtnOpenModFolder_Click(object sender, RoutedEventArgs e) => OpenLocation(ModDirectory);
-        private void BtnShowLogs_Click(object sender, RoutedEventArgs e) { MainTabs.SelectedIndex = 3; RadioLogHub.IsChecked = true; }
+        private void BtnShowLogs_Click(object sender, RoutedEventArgs e) { MainTabs.SelectedIndex = 2; RadioLogHub.IsChecked = true; }
         private void BtnOpenGameFolder_Click(object sender, RoutedEventArgs e) { if (GameDirectory is string root) OpenLocation(root); }
 
         private void BtnOpenWebOfficial_Click(object sender, RoutedEventArgs e)

@@ -32,16 +32,39 @@ Directory.CreateDirectory(target);
 using var lease = new InstallationLease(local);
 using var transaction = new FileTransaction(local);
 string backup = "NeuralFX/Backups/Packages/" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N");
+// Junto al escáner de mods de CS1 solo vive lo que el juego necesita, más las licencias que
+// acompañan al ensamblado y el registro de lo instalado. La documentación, el instalador, el
+// lanzador y el catálogo se quedan en el paquete extraído: ahí es donde se usan, y de hecho
+// Install-NeuralFX.ps1 se niega a ejecutarse desde la carpeta Mods.
+static bool BelongsInModDirectory(string key) =>
+    key is "NeuralFX.dll" or "LICENSE" or "NOTICE" or "deployment-manifest.json";
+
 foreach (var file in payload)
 {
-    string relative = file.Key.StartsWith("Hub/", StringComparison.Ordinal) ? hubRelative + file.Key.Substring(3) : modRelative + "/" + file.Key;
+    bool hub = file.Key.StartsWith("Hub/", StringComparison.Ordinal);
+    if (!hub && !BelongsInModDirectory(file.Key)) continue;
+    string relative = hub ? hubRelative + file.Key.Substring(3) : modRelative + "/" + file.Key;
     string path = ManagedPaths.Resolve(local, relative);
     if (File.Exists(path)) transaction.Write(backup + "/" + file.Key, File.ReadAllBytes(path));
     transaction.Write(relative, file.Value);
 }
 // Older packages put desktop assemblies and backups where CS1's mod scanner loads every DLL.
 // Move those known directories into the private backup area in the same transaction.
-var legacyDirectories = new[] { Path.Combine(target, "Hub"), Path.Combine(target, ".neuralfx-previous") };
+var legacyDirectories = new[]
+{
+    Path.Combine(target, "Hub"), Path.Combine(target, ".neuralfx-previous"),
+    // Paquetes anteriores copiaban aquí el ZIP entero. Se archivan y se retiran.
+    Path.Combine(target, "docs"), Path.Combine(target, "licenses"),
+};
+foreach (string name in new[] { "README.md", "Iniciar-NeuralFX-Hub.bat", "Install-NeuralFX.ps1", "capabilities.json" })
+{
+    string path = Path.Combine(target, name);
+    if (!File.Exists(path)) continue;
+    string relative = Path.GetRelativePath(local, path);
+    ManagedPaths.Resolve(local, relative);
+    transaction.Write(backup + "/legacy/" + name, File.ReadAllBytes(path));
+    transaction.Write(relative, null);
+}
 foreach (string directory in legacyDirectories.Where(Directory.Exists))
     foreach (string path in Directory.EnumerateFiles(directory, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 }))
     {

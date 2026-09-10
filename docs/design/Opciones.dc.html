@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+    a { color: #4EC9B0; } a:hover { color: #6FE0C9; }
+    .grp { background: #2E3840; border: 1px solid #4A5866; border-radius: 4px; padding: 16px 18px; display: flex; flex-direction: column; gap: 13px; }
+    .grph { font-size: 13px; font-weight: 600; color: #FFFFFF; letter-spacing: 0.06em; text-transform: uppercase; }
+    .chk { display: flex; align-items: flex-start; gap: 11px; }
+    .box { width: 15px; height: 15px; border: 1px solid #6B7A87; border-radius: 2px; flex: none; margin-top: 1px; box-sizing: border-box; }
+    .box.on { background: #7FD8C0; border-color: #7FD8C0; }
+    .lbl { font-size: 13px; color: #DCE4EA; line-height: 1.4; }
+    .sub { font-size: 11px; color: #8A98A4; line-height: 1.5; margin-top: 3px; }
+    .btn { display: inline-block; background: #4A5866; border: 1px solid #5C6C7A; border-radius: 3px; padding: 7px 14px; font-size: 12px; color: #FFFFFF; }
+  </style>
+</helmet>
+<div style="width: 760px; height: 660px; box-sizing: border-box; overflow: hidden; background: #232B31; padding: 22px; display: flex; flex-direction: column; gap: 14px">
+
+  <!-- Estado vivo, arriba del todo -->
+  <div style="background: #2A343B; border: 1px solid #4A5866; border-left: 3px solid #7FD8C0; border-radius: 4px; padding: 14px 16px">
+    <div style="font-size: 14px; font-weight: 600; color: #FFFFFF">Portador NGX operativo · NR sin confirmar</div>
+    <div style="font-size: 11px; color: #8A98A4; margin-top: 5px; line-height: 1.5">
+      Puente build 4 · ABI 3 · IPC 4 · movimiento óptico · UI no aislada
+    </div>
+  </div>
+
+  <div class="grp">
+    <span class="grph">Procesado</span>
+    <div class="chk">
+      <span class="box on"></span>
+      <div>
+        <div class="lbl">Activar NeuralFX al cargar una ciudad</div>
+        <div class="sub">Apagarlo detiene el feeder y el CAS propios. ReShade conserva el resto de efectos y el menú nunca ejecuta inferencia.</div>
+      </div>
+    </div>
+    <div class="chk">
+      <span class="box on"></span>
+      <div>
+        <div class="lbl">Avisar si otro mod aplica antialiasing</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grp">
+    <span class="grph">Acceso</span>
+    <div class="chk">
+      <span class="box on"></span>
+      <div><div class="lbl">Atajo <span style="font-family: Consolas, monospace">Ctrl + Alt + N</span></div></div>
+    </div>
+    <div class="chk">
+      <span class="box on"></span>
+      <div>
+        <div class="lbl">Botón en Unified UI</div>
+        <div class="sub">Se aplica al cargar la siguiente ciudad.</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 9px; margin-top: 2px">
+      <span class="btn">Abrir panel</span>
+      <span class="btn">Abrir el Hub</span>
+      <span class="btn">Guardar informe de sesión</span>
+    </div>
+  </div>
+
+  <!-- Experimental: un solo interruptor, todo lo demás detrás -->
+  <div class="grp" style="border-color: #6A5A4A">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <span class="grph" style="color: #E0B48C">Pruebas experimentales</span>
+      <span style="font-size: 11px; color: #8A98A4">desactivadas</span>
+    </div>
+    <div class="chk">
+      <span class="box"></span>
+      <div>
+        <div class="lbl">Permitir capacidades sin validar</div>
+        <div class="sub">
+          Habilita los vectores de movimiento de Unity y la traza de cámaras. Su cobertura y su signo están sin
+          verificar en CS1; ante un rechazo se vuelve al contrato óptico completo.
+        </div>
+      </div>
+    </div>
+    <div style="font-size: 11px; color: #7C8B98; line-height: 1.6; border-top: 1px solid #3E4A54; padding-top: 11px">
+      Jitter de cámara, SR interno y aislamiento de la UI siguen sin implementar. No aparecen aquí como interruptores
+      porque no harían nada.
+    </div>
+  </div>
+
+  <div style="flex-grow: 1"></div>
+  <div style="font-size: 11px; color: #6F7D89; line-height: 1.5">
+    La instalación, la compatibilidad del equipo y los registros se revisan en el Hub, no aquí.
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

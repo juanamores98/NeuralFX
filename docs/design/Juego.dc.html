@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+    a { color: #4EC9B0; } a:hover { color: #6FE0C9; }
+    .seg { display: flex; border: 1px solid #55636F; border-radius: 3px; overflow: hidden; }
+    .seg > span { font-size: 12px; padding: 6px 0; flex-grow: 1; text-align: center; color: #A9B6C1; font-variant-numeric: tabular-nums; }
+    .seg > span + span { border-left: 1px solid #55636F; }
+    .on { background: #4A5866; color: #FFFFFF !important; font-weight: 600; }
+  </style>
+</helmet>
+<div style="width: 860px; height: 560px; box-sizing: border-box; overflow: hidden; position: relative; background: #1B2A21">
+
+  <!-- Vista de juego simulada, sólo contexto -->
+  <div style="position: absolute; inset: 0; background: linear-gradient(#24382C 0%, #2E4536 46%, #3A4A3B 100%)"></div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 190px; background: linear-gradient(rgba(20,28,22,0), rgba(16,22,18,0.75))"></div>
+  <div style="position: absolute; left: 120px; top: 210px; width: 62px; height: 170px; background: #2A3A31; opacity: 0.85"></div>
+  <div style="position: absolute; left: 196px; top: 262px; width: 48px; height: 118px; background: #314236; opacity: 0.85"></div>
+  <div style="position: absolute; left: 600px; top: 188px; width: 74px; height: 192px; background: #283730; opacity: 0.8"></div>
+  <div style="position: absolute; left: 690px; top: 240px; width: 54px; height: 140px; background: #2F4038; opacity: 0.8"></div>
+
+  <!-- Panel Colossal -->
+  <div style="position: absolute; left: 40px; top: 46px; width: 352px; box-sizing: border-box; background: #2E3840; border: 1px solid #4A5866; border-radius: 4px; box-shadow: 0 10px 28px rgba(0,0,0,0.45); color: #DCE4EA; font-size: 13px">
+
+    <!-- Barra de título (arrastrable) -->
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 11px 12px 11px 14px; border-bottom: 1px solid #3E4A54">
+      <span style="font-size: 14px; font-weight: 600; letter-spacing: 0.01em; color: #FFFFFF">NeuralFX</span>
+      <span style="font-size: 13px; color: #93A2AE; padding: 0 4px; cursor: pointer">✕</span>
+    </div>
+
+    <div style="padding: 14px; display: flex; flex-direction: column; gap: 14px">
+
+      <!-- Estado: una línea, no seis -->
+      <div style="display: flex; align-items: flex-start; gap: 9px">
+        <span style="width: 7px; height: 7px; border-radius: 50%; background: #7FD8C0; margin-top: 5px; flex: none"></span>
+        <div style="min-width: 0">
+          <div style="font-size: 13px; color: #FFFFFF; font-weight: 600">Portador NGX operativo</div>
+          <div style="font-size: 11px; color: #93A2AE; margin-top: 3px; line-height: 1.5">NR sin confirmar · UI no aislada · movimiento óptico</div>
+        </div>
+      </div>
+
+      <!-- Métricas -->
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; border-top: 1px solid #3E4A54; border-bottom: 1px solid #3E4A54; padding: 11px 0">
+        <div>
+          <div style="font-size: 10px; color: #7C8B98; letter-spacing: 0.04em">FPS</div>
+          <div style="font-size: 18px; font-weight: 600; color: #FFFFFF; font-variant-numeric: tabular-nums; margin-top: 2px">41,6</div>
+        </div>
+        <div>
+          <div style="font-size: 10px; color: #7C8B98; letter-spacing: 0.04em">FRAME</div>
+          <div style="font-size: 18px; font-weight: 600; color: #FFFFFF; font-variant-numeric: tabular-nums; margin-top: 2px">24,0<span style="font-size: 11px; color: #7C8B98; font-weight: 400"> ms</span></div>
+        </div>
+        <div>
+          <div style="font-size: 10px; color: #7C8B98; letter-spacing: 0.04em">SALIDA</div>
+          <div style="font-size: 18px; font-weight: 600; color: #FFFFFF; font-variant-numeric: tabular-nums; margin-top: 2px">2160p</div>
+        </div>
+      </div>
+
+      <!-- Acción principal -->
+      <div style="background: #4A5866; border: 1px solid #5C6C7A; border-radius: 3px; text-align: center; padding: 10px 0; font-size: 13px; font-weight: 600; color: #FFFFFF; cursor: pointer">Desactivar NeuralFX</div>
+
+      <!-- Controles -->
+      <div style="display: flex; flex-direction: column; gap: 7px">
+        <span style="font-size: 11px; color: #93A2AE">Trabajo NR</span>
+        <div class="seg"><span class="on">100%</span><span>85%</span><span>66%</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 7px">
+        <span style="font-size: 11px; color: #93A2AE">Nitidez</span>
+        <div class="seg"><span>Apagada</span><span>0,15</span><span class="on">0,30</span></div>
+      </div>
+
+      <!-- Reset y detalle plegado -->
+      <div style="border-top: 1px solid #3E4A54; padding-top: 12px; display: flex; flex-direction: column; gap: 10px">
+        <div style="background: #4A5866; border: 1px solid #5C6C7A; border-radius: 3px; text-align: center; padding: 8px 0; font-size: 12px; color: #FFFFFF; cursor: pointer">Reset de historial</div>
+        <span style="font-size: 11px; color: #7C8B98; font-variant-numeric: tabular-nums">8 confirmados de 8 · comando aplicado</span>
+        <div style="background: #4A5866; border: 1px solid #5C6C7A; border-radius: 3px; text-align: center; padding: 8px 0; font-size: 12px; color: #DCE4EA; cursor: pointer">Ver detalle técnico</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nota de detalle plegado -->
+  <div style="position: absolute; left: 40px; top: 496px; width: 352px; font-size: 11px; color: rgba(220,228,234,0.62); line-height: 1.5">
+    Ctrl + Alt + N abre y cierra · el detalle técnico completo vive en el Hub
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

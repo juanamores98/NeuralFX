@@ -31,8 +31,37 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
 
-  <Target Name="DeployToModDirectory" AfterTargets="Build" Condition="'$(Deploy)' == 'true' and '$(SkipDeploy)' != 'true'">
-    <Error Text="Use tools/package.ps1 -Deploy to validate and deploy both components with backups. The desktop Hub must remain outside the Cities: Skylines mod directory." />
+  <!--
+    Despliegue en caliente del mod administrado, como el resto de mods del workspace.
+    Copia SOLO NeuralFX.dll y SOLO a Addons/Mods/NeuralFX: CS1 escanea recursivamente
+    todas las DLL de esa carpeta e intenta cargarlas como ensamblados del juego, así que
+    el Hub de escritorio nunca puede vivir ahí.
+
+    Esto no sustituye a `tools/package.ps1 -Deploy`, que es la entrega real: mod, Hub y
+    addon nativo juntos, con hashes, manifiesto y copias de seguridad. Desplegar solo el
+    mod puede dejarlo por delante del puente instalado; si los contratos no coinciden el
+    mod entra en bypass y lo dice en su estado, no rompe la partida.
+
+      -p:DeployMod=false   no copiar en esta compilación
+      -p:SkipDeploy=true   igual, y es lo que ya usan los scripts de empaquetado
+      -p:ModDeployDir=…    otra carpeta de destino
+  -->
+  <PropertyGroup>
+    <DeployMod Condition="'$(DeployMod)' == ''">true</DeployMod>
+    <ModDeployDir Condition="'$(ModDeployDir)' == ''">$(LOCALAPPDATA)\Colossal Order\Cities_Skylines\Addons\Mods\NeuralFX\</ModDeployDir>
+  </PropertyGroup>
+
+  <Target Name="DeployToModDirectory" AfterTargets="Build"
+          Condition="'$(DeployMod)' == 'true' and '$(SkipDeploy)' != 'true' and '$(OS)' == 'Windows_NT'">
+    <MakeDir Directories="$(ModDeployDir)" ContinueOnError="WarnAndContinue" />
+    <!-- Un reintento corto: con CS1 abierto el archivo está bloqueado y no se desbloquea esperando. -->
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModDeployDir)" Retries="1" RetryDelayMilliseconds="250" ContinueOnError="WarnAndContinue">
+      <Output TaskParameter="CopiedFiles" ItemName="_DeployedMod" />
+    </Copy>
+    <Warning Condition="'@(_DeployedMod)' == ''"
+             Text="No se pudo copiar NeuralFX.dll a $(ModDeployDir). Si Cities: Skylines está abierto mantiene el archivo bloqueado: ciérralo y vuelve a compilar." />
+    <Message Condition="'@(_DeployedMod)' != ''" Importance="high"
+             Text="NeuralFX.dll desplegado en $(ModDeployDir) · actívalo en el Gestor de contenido. El Hub y el addon nativo se actualizan aparte con tools/package.ps1 -Deploy." />
   </Target>
 
 </Project>

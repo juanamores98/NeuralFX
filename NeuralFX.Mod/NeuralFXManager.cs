@@ -127,11 +127,10 @@ namespace NeuralFX
                 CommandResult = _commandResult, CommandReason = _commandReason, ControlsRevision=controls.Revision, ControlsResult=controlResult, RequestedWork=controls.WorkPercent, RequestedSharpness=controls.Sharpness
             };
             if (_channel != null) _channel.Publish(CurrentFrame);
-            if (_panel.Visible) _panel.Update(string.Format("{0:F1} FPS · intervalo del juego {1:F2} ms", _fps, _frameMs),
-                SessionViewState.Summary(CurrentFrame), SessionViewState.Details(CurrentFrame),
+            if (_panel.Visible) _panel.Update(CurrentFrame,
                 !string.IsNullOrEmpty(ModSettings.LastSaveError) ? "Guardado pendiente: " + ModSettings.LastSaveError :
                 _temporal != null && _temporal.RestoreConflict ? "Se conserva un cambio posterior de otro mod en la cámara." :
-                _conflicts.Length == 0 ? "Sin AA adicional detectado. NR requiere comprobación independiente." : "Revisar AA: " + string.Join(", ", _conflicts));
+                _conflicts.Length == 0 ? "" : "Revisar AA: " + string.Join(", ", _conflicts));
         }
         public bool SetSessionControls(int workPercent, float sharpness)
         {

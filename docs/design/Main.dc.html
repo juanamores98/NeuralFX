@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+    a { color: #4EC9B0; } a:hover { color: #6FE0C9; }
+  </style>
+</helmet>
+<div style="width: 1000px; height: 700px; box-sizing: border-box; display: flex; background: #1E1E1E; color: #F1F1F1; font-size: 13px; overflow: hidden">
+
+  <!-- Rail -->
+  <div style="width: 176px; flex: none; box-sizing: border-box; padding: 26px 0 20px 0; border-right: 1px solid #2A2A2D; display: flex; flex-direction: column">
+    <div style="padding: 0 22px 26px 22px">
+      <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.14em; color: #F1F1F1">NEURALFX</div>
+      <div style="font-size: 11px; color: #6E6E73; margin-top: 4px; font-variant-numeric: tabular-nums">Hub 2.1.0</div>
+    </div>
+    <div style="display: flex; flex-direction: column">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 9px 22px; border-left: 2px solid #4EC9B0; background: #232325">
+        <span style="font-size: 13px; color: #F1F1F1; font-weight: 600">Estado</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 9px 22px; border-left: 2px solid transparent">
+        <span style="font-size: 13px; color: #9D9D9D">Instalar</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 9px 22px; border-left: 2px solid transparent">
+        <span style="font-size: 13px; color: #9D9D9D">Sistema</span>
+      </div>
+    </div>
+    <div style="flex-grow: 1"></div>
+    <div style="padding: 0 22px; display: flex; flex-direction: column; gap: 7px">
+      <div style="font-size: 11px; color: #6E6E73; line-height: 1.5">Panel en ciudad<br><span style="font-family: Consolas, monospace; color: #9D9D9D">Ctrl + Alt + N</span></div>
+      <div style="font-size: 11px; color: #6E6E73; line-height: 1.5">Menú ReShade<br><span style="font-family: Consolas, monospace; color: #9D9D9D">Home</span></div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div style="flex-grow: 1; box-sizing: border-box; padding: 34px 36px 24px 36px; display: flex; flex-direction: column; gap: 0; min-width: 0">
+
+    <!-- Estado principal -->
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #4EC9B0; align-self: center"></span>
+      <div style="font-size: 24px; font-weight: 600; color: #F1F1F1; letter-spacing: -0.01em">Portador NGX operativo</div>
+    </div>
+    <div style="font-size: 13px; color: #9D9D9D; margin: 8px 0 0 20px; line-height: 1.6; max-width: 640px; text-wrap: pretty">
+      NR sin confirmar. La llamada se aceptó y sus comandos se enviaron; eso no certifica todavía la imagen neural.
+      La UI del juego no está aislada del procesado.
+    </div>
+
+    <!-- Métricas vivas -->
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: #2A2A2D; border-top: 1px solid #2A2A2D; border-bottom: 1px solid #2A2A2D; margin: 30px 0 0 0">
+      <div style="background: #1E1E1E; padding: 16px 18px">
+        <div style="font-size: 11px; color: #6E6E73; letter-spacing: 0.04em">FPS</div>
+        <div style="font-size: 26px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; color: #F1F1F1">41,6</div>
+      </div>
+      <div style="background: #1E1E1E; padding: 16px 18px">
+        <div style="font-size: 11px; color: #6E6E73; letter-spacing: 0.04em">Intervalo</div>
+        <div style="font-size: 26px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; color: #F1F1F1">24,0 <span style="font-size: 13px; color: #6E6E73; font-weight: 400">ms</span></div>
+      </div>
+      <div style="background: #1E1E1E; padding: 16px 18px">
+        <div style="font-size: 11px; color: #6E6E73; letter-spacing: 0.04em">Trabajo NR</div>
+        <div style="font-size: 26px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; color: #F1F1F1">100<span style="font-size: 15px; color: #6E6E73; font-weight: 400">%</span></div>
+      </div>
+      <div style="background: #1E1E1E; padding: 16px 18px">
+        <div style="font-size: 11px; color: #6E6E73; letter-spacing: 0.04em">Reset conf. / solic.</div>
+        <div style="font-size: 26px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; color: #F1F1F1">8<span style="color: #6E6E73; font-weight: 400"> / 8</span></div>
+      </div>
+    </div>
+
+    <!-- Controles de sesión -->
+    <div style="margin-top: 28px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: center; gap: 14px">
+        <button style="font-family: inherit; font-size: 13px; font-weight: 600; color: #1E1E1E; background: #4EC9B0; border: 0; border-radius: 3px; padding: 9px 18px; cursor: pointer">Desactivar NeuralFX</button>
+        <button style="font-family: inherit; font-size: 13px; color: #F1F1F1; background: transparent; border: 1px solid #3E3E42; border-radius: 3px; padding: 8px 16px; cursor: pointer">Reset de historial</button>
+        <button style="font-family: inherit; font-size: 13px; color: #F1F1F1; background: transparent; border: 1px solid #3E3E42; border-radius: 3px; padding: 8px 16px; cursor: pointer">Abrir panel en ciudad</button>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 28px; margin-top: 2px">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="font-size: 12px; color: #9D9D9D; width: 78px">Trabajo NR</span>
+          <div style="display: flex; border: 1px solid #3E3E42; border-radius: 3px; overflow: hidden">
+            <span style="font-size: 12px; padding: 6px 14px; background: #303033; color: #F1F1F1; font-weight: 600; font-variant-numeric: tabular-nums">100%</span>
+            <span style="font-size: 12px; padding: 6px 14px; color: #9D9D9D; border-left: 1px solid #3E3E42; font-variant-numeric: tabular-nums">85%</span>
+            <span style="font-size: 12px; padding: 6px 14px; color: #9D9D9D; border-left: 1px solid #3E3E42; font-variant-numeric: tabular-nums">66%</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="font-size: 12px; color: #9D9D9D; width: 52px">Nitidez</span>
+          <div style="display: flex; border: 1px solid #3E3E42; border-radius: 3px; overflow: hidden">
+            <span style="font-size: 12px; padding: 6px 14px; color: #9D9D9D">Apagada</span>
+            <span style="font-size: 12px; padding: 6px 14px; color: #9D9D9D; border-left: 1px solid #3E3E42; font-variant-numeric: tabular-nums">0,15</span>
+            <span style="font-size: 12px; padding: 6px 14px; background: #303033; color: #F1F1F1; font-weight: 600; border-left: 1px solid #3E3E42; font-variant-numeric: tabular-nums">0,30</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size: 11px; color: #6E6E73; line-height: 1.6; max-width: 660px; text-wrap: pretty">
+        El trabajo NR reduce el coste del addon, no la resolución que renderiza Unity. NR consume GPU: no está pensado
+        para subir los FPS de una ciudad limitada por CPU.
+      </div>
+    </div>
+
+    <div style="flex-grow: 1"></div>
+
+    <!-- Detalles plegados -->
+    <div style="border-top: 1px solid #2A2A2D; padding-top: 14px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; justify-content: space-between">
+        <span style="font-size: 12px; color: #9D9D9D">Detalles de la sesión</span>
+        <span style="font-size: 11px; color: #6E6E73; font-family: Consolas, monospace">build 4 · ABI 3 · IPC 4</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 28px; font-size: 11px; color: #6E6E73; line-height: 1.7">
+        <div>Movimiento <span style="color: #9D9D9D">Óptico</span></div>
+        <div>UI protegida <span style="color: #CE9178">sin verificar</span></div>
+        <div>Tiempo GPU NR <span style="color: #9D9D9D">no medido</span></div>
+        <div>Escena <span style="color: #9D9D9D; font-variant-numeric: tabular-nums">3840×2160</span></div>
+        <div>Salida <span style="color: #9D9D9D; font-variant-numeric: tabular-nums">3840×2160</span></div>
+        <div>SR interno <span style="color: #9D9D9D">no disponible</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

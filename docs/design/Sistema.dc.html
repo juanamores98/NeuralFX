@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+    a { color: #4EC9B0; } a:hover { color: #6FE0C9; }
+    .row { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 0 24px; padding: 11px 0; border-bottom: 1px solid #262629; }
+    .k { font-size: 12px; color: #6E6E73; }
+    .v { font-size: 13px; color: #F1F1F1; }
+    .m { font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; color: #9D9D9D; }
+  </style>
+</helmet>
+<div style="width: 1000px; height: 700px; box-sizing: border-box; display: flex; background: #1E1E1E; color: #F1F1F1; font-size: 13px; overflow: hidden">
+
+  <div style="width: 176px; flex: none; box-sizing: border-box; padding: 26px 0 20px 0; border-right: 1px solid #2A2A2D; display: flex; flex-direction: column">
+    <div style="padding: 0 22px 26px 22px">
+      <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.14em">NEURALFX</div>
+      <div style="font-size: 11px; color: #6E6E73; margin-top: 4px; font-variant-numeric: tabular-nums">Hub 2.1.0</div>
+    </div>
+    <div style="display: flex; flex-direction: column">
+      <div style="padding: 9px 22px; border-left: 2px solid transparent"><span style="font-size: 13px; color: #9D9D9D">Estado</span></div>
+      <div style="padding: 9px 22px; border-left: 2px solid transparent"><span style="font-size: 13px; color: #9D9D9D">Instalar</span></div>
+      <div style="padding: 9px 22px; border-left: 2px solid #4EC9B0; background: #232325"><span style="font-size: 13px; font-weight: 600">Sistema</span></div>
+    </div>
+    <div style="flex-grow: 1"></div>
+    <div style="padding: 0 22px">
+      <span style="font-size: 12px; color: #9D9D9D; cursor: pointer">Volver a analizar</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; box-sizing: border-box; padding: 34px 36px 24px 36px; display: flex; flex-direction: column; min-width: 0">
+
+    <div style="font-size: 24px; font-weight: 600; letter-spacing: -0.01em">Sistema</div>
+    <div style="font-size: 13px; color: #9D9D9D; margin-top: 8px; line-height: 1.6; max-width: 620px; text-wrap: pretty">
+      Lo que este equipo aporta al pipeline. El nombre de la GPU no garantiza que los runtimes NVIDIA funcionen aquí.
+    </div>
+
+    <div style="margin-top: 26px; border-top: 1px solid #262629">
+      <div class="row"><span class="k">Adaptador</span><span class="v">NVIDIA GeForce RTX 5080 <span style="color: #4EC9B0; font-size: 11px; margin-left: 8px">Blackwell · NR admitido</span></span></div>
+      <div class="row"><span class="k">VRAM dedicada</span><span class="v" style="font-variant-numeric: tabular-nums">16,0 GB</span></div>
+      <div class="row"><span class="k">Controlador</span><span class="v" style="font-variant-numeric: tabular-nums">616.86 <span style="color: #6E6E73; font-size: 11px; margin-left: 8px">≥ 616.64 requerido</span></span></div>
+      <div class="row"><span class="k">Cities.exe</span><span class="m">C:\Program Files (x86)\Steam\steamapps\common\Cities_Skylines</span></div>
+      <div class="row"><span class="k">Permiso de escritura</span><span class="v" style="color: #4EC9B0">concedido</span></div>
+      <div class="row"><span class="k">Proceso del juego</span><span class="v">cerrado</span></div>
+      <div class="row"><span class="k">Mod en Addons</span><span class="m">…\Addons\Mods\NeuralFX\NeuralFX.dll <span style="color: #CE9178; font-family: inherit; margin-left: 8px">activar en el Gestor de contenido</span></span></div>
+      <div class="row"><span class="k">Copias locales</span><span class="m">%LOCALAPPDATA%\NeuralFX\Cache\v2</span></div>
+      <div class="row"><span class="k">Copias de seguridad</span><span class="m">%LOCALAPPDATA%\NeuralFX\Backups</span></div>
+      <div class="row" style="border-bottom: 0"><span class="k">Archivos instalados</span><span class="v"><span style="color: #4EC9B0">19 de 19</span> <span style="color: #6E6E73; font-size: 12px; margin-left: 6px">coinciden con el registro</span></span></div>
+    </div>
+
+    <div style="flex-grow: 1"></div>
+
+    <div style="border-top: 1px solid #2A2A2D; padding-top: 15px; display: flex; align-items: center; gap: 22px">
+      <span style="font-size: 12px; color: #9D9D9D">Registros</span>
+      <div style="display: flex; gap: 4px">
+        <span style="font-size: 12px; padding: 4px 11px; border-radius: 3px; background: #2C2C2F; color: #F1F1F1">Hub</span>
+        <span style="font-size: 12px; padding: 4px 11px; border-radius: 3px; color: #9D9D9D">ReShade.log</span>
+        <span style="font-size: 12px; padding: 4px 11px; border-radius: 3px; color: #9D9D9D">dlss5-feed.log</span>
+      </div>
+      <div style="flex-grow: 1"></div>
+      <span style="font-size: 12px; color: #9D9D9D; cursor: pointer">Exportar diagnóstico</span>
+      <span style="font-size: 12px; color: #9D9D9D; cursor: pointer">Abrir carpeta del juego</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

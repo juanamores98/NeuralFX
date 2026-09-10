@@ -69,7 +69,13 @@ Esta acción restaura **el pipeline del juego**. **No desinstala el Hub ni el mo
 
 ## Compilar y verificar
 
-Requiere .NET SDK 8, ensamblados administrados de CS1, MSVC C++ x64 y Windows SDK. Puedes indicar `ManagedDLLPath` como propiedad de MSBuild si Steam está en otra ubicación. Compilar no despliega automáticamente.
+Requiere .NET SDK 8, ensamblados administrados de CS1, MSVC C++ x64 y Windows SDK. Puedes indicar `ManagedDLLPath` como propiedad de MSBuild si Steam está en otra ubicación.
+
+Compilar `NeuralFX.Mod` copia `NeuralFX.dll` a `%LOCALAPPDATA%\Colossal Order\Cities_Skylines\Addons\Mods\NeuralFX\`, como el resto de mods del repositorio. Solo esa DLL y solo esa carpeta: CS1 escanea recursivamente todas las DLL de `Mods` e intenta cargarlas como ensamblados del juego, así que el Hub de escritorio nunca puede vivir ahí — y tampoco el paquete completo, que solo debe extraerse en una carpeta normal.
+
+Compilar el Hub o ejecutar las pruebas **no** despliega nada. Para evitarlo también al compilar el mod usa `-p:DeployMod=false`, o `-NoDeploy` en `Build-NeuralFX.ps1`; `-p:ModDeployDir=…` cambia el destino. Con el juego abierto la copia falla con un aviso, sin romper la compilación.
+
+Esto **no** sustituye a la entrega real. Desplegar solo el mod puede dejarlo por delante del puente instalado; si los contratos no coinciden el mod entra en bypass y lo indica en su estado. Para actualizar mod, Hub y addon nativo juntos, con hashes y copias de seguridad, sigue siendo `tools/package.ps1 -Deploy`.
 
 ```powershell
 ./tools/Build-NeuralFX.ps1 -ManagedDLLPath 'D:\Steam\steamapps\common\Cities_Skylines\Cities_Data\Managed' -Package

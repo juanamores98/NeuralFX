@@ -18,3 +18,6 @@ Native/out/
 Native/toolchain/
 Native/sdk/
 artifacts/
+
+# Lienzo de diseño sembrado: se regenera con docs/design/*.dc.html + canvas.json
+docs/design/neuralfx-rediseno.html

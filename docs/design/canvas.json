@@ -1,0 +1,35 @@
+{
+  "artboards": [
+    { "file": "PrimerUso.dc.html", "x": 0, "y": 0, "w": 1000, "h": 700, "title": "Hub · Primer uso" },
+    { "file": "Main.dc.html", "x": 1090, "y": 0, "w": 1000, "h": 700, "title": "Hub · Estado" },
+    { "file": "Instalar.dc.html", "x": 2180, "y": 0, "w": 1000, "h": 700, "title": "Hub · Instalar" },
+    { "file": "Sistema.dc.html", "x": 3270, "y": 0, "w": 1000, "h": 700, "title": "Hub · Sistema" },
+    { "file": "Juego.dc.html", "x": 0, "y": 830, "w": 860, "h": 560, "title": "En ciudad · Panel" },
+    { "file": "Opciones.dc.html", "x": 950, "y": 830, "w": 760, "h": 660, "title": "En ciudad · Opciones del mod" },
+    { "file": "Tokens.dc.html", "x": 1800, "y": 830, "w": 900, "h": 700, "title": "Sistema visual" }
+  ],
+  "annotations": [
+    {
+      "id": "nota-hub",
+      "x": 0,
+      "y": -150,
+      "w": 470,
+      "text": "HUB\nTres pestañas se vuelven tres palabras en un rail. Una acción primaria por pantalla; restaurar y desinstalar bajan a texto al pie. La lista de diez componentes se resume en una línea."
+    },
+    {
+      "id": "nota-juego",
+      "x": 0,
+      "y": 1430,
+      "w": 470,
+      "text": "EN CIUDAD\nPanel de 480x480 a 352 de ancho. Seis etiquetas largas se convierten en una linea de estado, tres metricas y dos segmentados. El detalle tecnico completo vive en el Hub."
+    },
+    {
+      "id": "nota-honestidad",
+      "x": 1800,
+      "y": 1570,
+      "w": 470,
+      "text": "HONESTIDAD EN LA UI\nEl vocabulario de estado es el mismo en los tres sitios y sale de SessionViewState. Ningun estado afirma imagen neural sin NrConfirmed. La nota de coste de GPU acompana a los presets."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

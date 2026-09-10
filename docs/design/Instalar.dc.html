@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+    a { color: #4EC9B0; } a:hover { color: #6FE0C9; }
+  </style>
+</helmet>
+<div style="width: 1000px; height: 700px; box-sizing: border-box; display: flex; background: #1E1E1E; color: #F1F1F1; font-size: 13px; overflow: hidden">
+
+  <!-- Rail -->
+  <div style="width: 176px; flex: none; box-sizing: border-box; padding: 26px 0 20px 0; border-right: 1px solid #2A2A2D; display: flex; flex-direction: column">
+    <div style="padding: 0 22px 26px 22px">
+      <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.14em; color: #F1F1F1">NEURALFX</div>
+      <div style="font-size: 11px; color: #6E6E73; margin-top: 4px; font-variant-numeric: tabular-nums">Hub 2.1.0</div>
+    </div>
+    <div style="display: flex; flex-direction: column">
+      <div style="display: flex; align-items: center; padding: 9px 22px; border-left: 2px solid transparent">
+        <span style="font-size: 13px; color: #9D9D9D">Estado</span>
+      </div>
+      <div style="display: flex; align-items: center; padding: 9px 22px; border-left: 2px solid #4EC9B0; background: #232325">
+        <span style="font-size: 13px; color: #F1F1F1; font-weight: 600">Instalar</span>
+      </div>
+      <div style="display: flex; align-items: center; padding: 9px 22px; border-left: 2px solid transparent">
+        <span style="font-size: 13px; color: #9D9D9D">Sistema</span>
+      </div>
+    </div>
+    <div style="flex-grow: 1"></div>
+    <div style="padding: 0 22px">
+      <div style="font-size: 11px; color: #6E6E73; line-height: 1.5">Cities: Skylines<br><span style="color: #4EC9B0">cerrado</span> · listo para escribir</div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div style="flex-grow: 1; box-sizing: border-box; padding: 34px 36px 24px 36px; display: flex; flex-direction: column; min-width: 0">
+
+    <div style="font-size: 24px; font-weight: 600; letter-spacing: -0.01em">Instalación antigua detectada</div>
+    <div style="font-size: 13px; color: #9D9D9D; margin-top: 8px; line-height: 1.6; max-width: 620px; text-wrap: pretty">
+      Hay un pipeline registrado por el Hub 1.0.0 en la carpeta del juego. Actualizarlo conserva una copia verificada
+      del estado actual antes de tocar nada.
+    </div>
+
+    <!-- Preset -->
+    <div style="margin-top: 30px">
+      <div style="font-size: 12px; color: #9D9D9D; margin-bottom: 10px">Preset</div>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+        <div style="border: 1px solid #4EC9B0; border-radius: 4px; padding: 13px 14px; background: #21282A">
+          <div style="font-size: 13px; font-weight: 600; color: #F1F1F1">Nativo</div>
+          <div style="font-size: 11px; color: #9D9D9D; margin-top: 5px; line-height: 1.5; font-variant-numeric: tabular-nums">Trabajo 100% · CAS 0,30</div>
+        </div>
+        <div style="border: 1px solid #3E3E42; border-radius: 4px; padding: 13px 14px">
+          <div style="font-size: 13px; font-weight: 600; color: #F1F1F1">Equilibrado</div>
+          <div style="font-size: 11px; color: #6E6E73; margin-top: 5px; line-height: 1.5; font-variant-numeric: tabular-nums">Trabajo 85% · CAS 0,30</div>
+        </div>
+        <div style="border: 1px solid #3E3E42; border-radius: 4px; padding: 13px 14px">
+          <div style="font-size: 13px; font-weight: 600; color: #F1F1F1">Coste reducido</div>
+          <div style="font-size: 11px; color: #6E6E73; margin-top: 5px; line-height: 1.5; font-variant-numeric: tabular-nums">Trabajo 66% · CAS 0,30</div>
+        </div>
+        <div style="border: 1px solid #3E3E42; border-radius: 4px; padding: 13px 14px">
+          <div style="font-size: 13px; font-weight: 600; color: #F1F1F1">Fotografía</div>
+          <div style="font-size: 11px; color: #6E6E73; margin-top: 5px; line-height: 1.5; font-variant-numeric: tabular-nums">Trabajo 100% · CAS 0,15</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acción primaria -->
+    <div style="margin-top: 26px; display: flex; align-items: center; gap: 16px">
+      <button style="font-family: inherit; font-size: 14px; font-weight: 600; color: #1E1E1E; background: #4EC9B0; border: 0; border-radius: 3px; padding: 12px 26px; cursor: pointer">Actualizar instalación</button>
+      <span style="font-size: 12px; color: #6E6E73; line-height: 1.5; max-width: 380px; text-wrap: pretty">Copia y registra 19 archivos. El juego debe seguir cerrado hasta que termine.</span>
+    </div>
+
+    <!-- Componentes: una línea, no una lista -->
+    <div style="margin-top: 34px; border-top: 1px solid #2A2A2D; border-bottom: 1px solid #2A2A2D">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 15px 0">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #4EC9B0"></span>
+          <span style="font-size: 13px; color: #F1F1F1">Componentes listos para instalar</span>
+          <span style="font-size: 12px; color: #6E6E73; font-variant-numeric: tabular-nums">10 de 10 verificados</span>
+        </div>
+        <span style="font-size: 12px; color: #9D9D9D">Ver componentes</span>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px 8px; padding: 0 0 16px 20px">
+        <span style="font-size: 11px; color: #9D9D9D; border: 1px solid #2F2F33; border-radius: 2px; padding: 3px 8px; font-variant-numeric: tabular-nums">ReShade 6.8</span>
+        <span style="font-size: 11px; color: #9D9D9D; border: 1px solid #2F2F33; border-radius: 2px; padding: 3px 8px; font-variant-numeric: tabular-nums">Feeder beta.4</span>
+        <span style="font-size: 11px; color: #9D9D9D; border: 1px solid #2F2F33; border-radius: 2px; padding: 3px 8px; font-variant-numeric: tabular-nums">RenoDX 3.3.4</span>
+        <span style="font-size: 11px; color: #9D9D9D; border: 1px solid #2F2F33; border-radius: 2px; padding: 3px 8px">LumeniteFX</span>
+        <span style="font-size: 11px; color: #9D9D9D; border: 1px solid #2F2F33; border-radius: 2px; padding: 3px 8px">NeuralFX CAS</span>
+        <span style="font-size: 11px; color: #9D9D9D; border: 1px solid #2F2F33; border-radius: 2px; padding: 3px 8px; font-variant-numeric: tabular-nums">nvngx_dlss 310.8.0</span>
+        <span style="font-size: 11px; color: #9D9D9D; border: 1px solid #2F2F33; border-radius: 2px; padding: 3px 8px; font-variant-numeric: tabular-nums">nvngx_dlssnr 310.8.0</span>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1"></div>
+
+    <!-- Acciones destructivas, al fondo y en texto -->
+    <div style="display: flex; align-items: center; gap: 22px; border-top: 1px solid #2A2A2D; padding-top: 15px">
+      <span style="font-size: 12px; color: #9D9D9D; cursor: pointer">Restaurar estado anterior…</span>
+      <span style="font-size: 12px; color: #9D9D9D; cursor: pointer">Desinstalar del juego…</span>
+      <div style="flex-grow: 1"></div>
+      <span style="font-size: 11px; color: #6E6E73; font-family: Consolas, monospace">…\steamapps\common\Cities_Skylines</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

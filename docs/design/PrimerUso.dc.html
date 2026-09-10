@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+    a { color: #4EC9B0; } a:hover { color: #6FE0C9; }
+  </style>
+</helmet>
+<div style="width: 1000px; height: 700px; box-sizing: border-box; background: #1E1E1E; color: #F1F1F1; font-size: 13px; overflow: hidden; padding: 52px 90px; display: flex; flex-direction: column">
+
+  <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.14em; color: #6E6E73">NEURALFX</div>
+  <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 22px">Tres pasos y una prueba en ciudad</div>
+  <div style="font-size: 13px; color: #9D9D9D; margin-top: 10px; line-height: 1.6; max-width: 580px; text-wrap: pretty">
+    El Hub hace el trabajo. Solo hay una cosa que no puede hacer por ti: aportar los dos runtimes de NVIDIA,
+    que no se pueden redistribuir.
+  </div>
+
+  <div style="margin-top: 40px; display: flex; flex-direction: column">
+
+    <!-- Paso 1 -->
+    <div style="display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 0 20px; padding-bottom: 26px">
+      <div style="display: flex; flex-direction: column; align-items: center">
+        <span style="width: 26px; height: 26px; border-radius: 50%; background: #4EC9B0; color: #1E1E1E; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">1</span>
+        <span style="flex-grow: 1; width: 1px; background: #2F2F33; margin-top: 8px"></span>
+      </div>
+      <div>
+        <div style="font-size: 15px; font-weight: 600">Preparar componentes</div>
+        <div style="font-size: 12px; color: #9D9D9D; margin-top: 6px; line-height: 1.6; max-width: 560px; text-wrap: pretty">
+          Ocho componentes públicos se descargan solos y se verifican por hash. No se toca el juego todavía.
+        </div>
+        <div style="margin-top: 14px; display: flex; align-items: center; gap: 14px">
+          <span style="font-size: 12px; color: #4EC9B0; font-variant-numeric: tabular-nums">8 de 8 verificados</span>
+        </div>
+        <div style="margin-top: 14px; border: 1px dashed #3E3E42; border-radius: 4px; padding: 16px 18px; max-width: 560px">
+          <div style="font-size: 12px; color: #F1F1F1; font-weight: 600">Arrastra aquí <span style="font-family: Consolas, monospace; font-weight: 400">nvngx_dlss.dll</span> y <span style="font-family: Consolas, monospace; font-weight: 400">nvngx_dlssnr.dll</span></div>
+          <div style="font-size: 11px; color: #6E6E73; margin-top: 6px; line-height: 1.6">
+            Se comprueban firma NVIDIA, producto firmado y PE x64.
+            <span style="font-family: Consolas, monospace">nvngx_dlssd.dll</span> es Ray Reconstruction y se rechaza: no sustituye a NR.
+          </div>
+          <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px">
+            <span style="font-size: 12px; color: #9D9D9D; border: 1px solid #3E3E42; border-radius: 3px; padding: 5px 12px">Buscar en Descargas</span>
+            <span style="font-size: 11px; color: #CE9178">2 pendientes</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paso 2 -->
+    <div style="display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 0 20px; padding-bottom: 26px">
+      <div style="display: flex; flex-direction: column; align-items: center">
+        <span style="width: 26px; height: 26px; border-radius: 50%; border: 1px solid #3E3E42; color: #6E6E73; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; box-sizing: border-box">2</span>
+        <span style="flex-grow: 1; width: 1px; background: #2F2F33; margin-top: 8px"></span>
+      </div>
+      <div>
+        <div style="font-size: 15px; font-weight: 600; color: #6E6E73">Instalar en Cities: Skylines</div>
+        <div style="font-size: 12px; color: #6E6E73; margin-top: 6px; line-height: 1.6; max-width: 560px; text-wrap: pretty">
+          Con el juego cerrado. Se guarda una copia verificada de lo que haya antes de escribir, y el mod queda activo
+          en el Gestor de contenido.
+        </div>
+      </div>
+    </div>
+
+    <!-- Paso 3 -->
+    <div style="display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 0 20px">
+      <div style="display: flex; flex-direction: column; align-items: center">
+        <span style="width: 26px; height: 26px; border-radius: 50%; border: 1px solid #3E3E42; color: #6E6E73; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; box-sizing: border-box">3</span>
+      </div>
+      <div>
+        <div style="font-size: 15px; font-weight: 600; color: #6E6E73">Comprobar en una ciudad</div>
+        <div style="font-size: 12px; color: #6E6E73; margin-top: 6px; line-height: 1.6; max-width: 560px; text-wrap: pretty">
+          Carga una ciudad de prueba, abre el panel con Ctrl + Alt + N y compara activado contra desactivado.
+          El Hub recoge la sesión y guarda el informe.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1"></div>
+
+  <div style="border-top: 1px solid #2A2A2D; padding-top: 18px; display: flex; align-items: center; gap: 18px">
+    <button style="font-family: inherit; font-size: 14px; font-weight: 600; color: #1E1E1E; background: #4EC9B0; border: 0; border-radius: 3px; padding: 12px 26px; cursor: pointer">Preparar componentes</button>
+    <span style="font-size: 12px; color: #6E6E73; line-height: 1.55; max-width: 520px; text-wrap: pretty">
+      NeuralFX es un puente experimental. Mejora la imagen a costa de GPU; no está pensado para subir los FPS.
+    </span>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

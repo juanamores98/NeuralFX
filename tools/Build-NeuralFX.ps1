@@ -1,4 +1,5 @@
-param([Parameter(Mandatory)][string]$ManagedDLLPath, [switch]$Package)
+# -NoDeploy compila sin copiar NeuralFX.dll a Addons/Mods/NeuralFX.
+param([Parameter(Mandatory)][string]$ManagedDLLPath, [switch]$Package, [switch]$NoDeploy)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 foreach ($name in @('UnityEngine.dll','Assembly-CSharp.dll','ColossalManaged.dll','ICities.dll')) {
@@ -7,9 +8,10 @@ foreach ($name in @('UnityEngine.dll','Assembly-CSharp.dll','ColossalManaged.dll
 Push-Location $taskRoot
 try {
     & ./Native/build.ps1 -SmokeHarness
-    & dotnet build NeuralFX.Mod/NeuralFX.Mod.csproj -c Release "-p:ManagedDLLPath=$ManagedDLLPath" -p:SkipDeploy=true
+    $deployArgs = @(); if ($NoDeploy) { $deployArgs += '-p:DeployMod=false' }
+    & dotnet build NeuralFX.Mod/NeuralFX.Mod.csproj -c Release "-p:ManagedDLLPath=$ManagedDLLPath" @deployArgs
     if ($LASTEXITCODE -ne 0) { throw 'Mod build with actual game assemblies failed.' }
-    & dotnet test NeuralFX.Tests/NeuralFX.Tests.csproj -c Release "-p:ManagedDLLPath=$ManagedDLLPath"
+    & dotnet test NeuralFX.Tests/NeuralFX.Tests.csproj -c Release "-p:ManagedDLLPath=$ManagedDLLPath" -p:DeployMod=false
     if ($LASTEXITCODE -ne 0) { throw 'Hub/IPC validation failed.' }
     & dotnet run --project tests/ModContracts/ModContracts.csproj -c Release
     if ($LASTEXITCODE -ne 0) { throw 'Mod contract validation failed.' }
