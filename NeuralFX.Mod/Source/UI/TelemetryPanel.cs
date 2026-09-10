@@ -206,13 +206,26 @@ namespace NeuralFX.UI
             Set(_resetInfo, frame.ResetCount + " confirmados de " + frame.CameraCuts + command);
 
             var manager = NeuralFXManager.Instance;
-            Set(_health, manager != null ? DescribeHealth(manager.Health) : "");
+            Set(_health, manager != null ? DescribeGeometry(frame) + DescribeHealth(manager.Health) : "");
             if (_health != null) _health.textColor = manager != null && manager.Health.DepthFlatMoving != 0 ? WarnColor : DimColor;
             string message = manager != null ? manager.ControlMessage : null;
             Set(_controlMessage, string.IsNullOrEmpty(message) ? notice ?? "" : message);
             _detailToggle.text = _showDetails ? "Ocultar detalle técnico" : "Ver detalle técnico";
             if (_showDetails) Set(_details, SessionViewState.Details(frame));
             Fit();
+        }
+        // La cámara de CS1 no siempre ocupa el backbuffer, y cambia de alto durante la partida.
+        // Las guías —profundidad y movimiento— salen de la cámara y se muestrean sobre la imagen
+        // presentada, así que esa diferencia las estira en vertical. Con la escena quieta no se
+        // nota; al mover la cámara sí. Decirlo aquí evita volver a deducirlo desde los registros.
+        private static string DescribeGeometry(TelemetryFrame frame)
+        {
+            if (frame.RenderHeight <= 0 || frame.DisplayHeight <= 0) return "";
+            if (frame.RenderWidth == frame.DisplayWidth && frame.RenderHeight == frame.DisplayHeight) return "";
+            float stretch = 100f * (frame.DisplayHeight - frame.RenderHeight) / frame.DisplayHeight;
+            return "Guías estiradas " + stretch.ToString("0.0") + "%: la cámara es " +
+                frame.RenderWidth + "x" + frame.RenderHeight + " sobre " +
+                frame.DisplayWidth + "x" + frame.DisplayHeight + ".\n";
         }
         // Lo que costo tres sesiones de diagnostico averiguar, dicho donde se ve.
         private static string DescribeHealth(Rendering.NativeHealth health)

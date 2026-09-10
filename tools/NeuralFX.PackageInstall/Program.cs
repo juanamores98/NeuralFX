@@ -61,7 +61,9 @@ var legacyDirectories = new[]
     // Paquetes anteriores copiaban aquí el ZIP entero. Se archivan y se retiran.
     Path.Combine(target, "docs"), Path.Combine(target, "licenses"),
 };
-foreach (string name in new[] { "README.md", "Iniciar-NeuralFX-Hub.bat", "Install-NeuralFX.ps1", "capabilities.json" })
+// Iniciar-NeuralFX-Hub.bat ya no está aquí: acompaña al ejecutable dentro del mod y lo
+// escribe el bucle de arriba. Retirarlo además sería escribir dos veces el mismo destino.
+foreach (string name in new[] { "README.md", "Install-NeuralFX.ps1", "capabilities.json" })
 {
     string path = Path.Combine(target, name);
     if (!File.Exists(path)) continue;
