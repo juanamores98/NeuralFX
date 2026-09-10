@@ -22,12 +22,12 @@ Ubicaciones instaladas:
 
 ```text
 %LOCALAPPDATA%\Colossal Order\Cities_Skylines\Addons\Mods\NeuralFX\NeuralFX.dll
-%LOCALAPPDATA%\NeuralFX\Hub\NeuralFX.Hub.exe
+%LOCALAPPDATA%\Colossal Order\Cities_Skylines\Addons\Mods\NeuralFX\App\NeuralFX.Hub.exe
 %LOCALAPPDATA%\NeuralFX\Cache\v2\
 %LOCALAPPDATA%\NeuralFX\Backups\Packages\
 ```
 
-El Hub reside fuera de Mods porque CS1 intenta cargar recursivamente sus DLL de escritorio como ensamblados del juego. El instalador también traslada `Hub` y `.neuralfx-previous` de paquetes antiguos a los backups privados.
+El Hub vive con el mod, en `App/`, publicado como un único ejecutable sin DLL sueltas: CS1 escanea `*.dll` de esa carpeta recursivamente e intenta cargarlas como ensamblados del juego, y sin ninguna no hay nada que cargar. Es la misma forma que usa Skyve. La configuración, la caché y los backups siguen en `%LOCALAPPDATA%\NeuralFX\`, que sí es su sitio. El instalador traslada a los backups privados la ubicación anterior del Hub, y también `Hub` y `.neuralfx-previous` de paquetes antiguos.
 
 ## Qué hace esta versión
 
