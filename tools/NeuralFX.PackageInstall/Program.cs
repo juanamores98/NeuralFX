@@ -38,12 +38,17 @@ string backup = "NeuralFX/Backups/Packages/" + DateTime.UtcNow.ToString("yyyyMMd
 // Install-NeuralFX.ps1 se niega a ejecutarse desde la carpeta Mods.
 static bool BelongsInModDirectory(string key) =>
     key is "NeuralFX.dll" or "LICENSE" or "NOTICE" or "deployment-manifest.json";
+// El lanzador vive junto al Hub, que es lo que abre. Dentro de Mods no le sirve a nadie.
+static bool BelongsBesideHub(string key) => key is "Iniciar-NeuralFX-Hub.bat";
 
 foreach (var file in payload)
 {
     bool hub = file.Key.StartsWith("Hub/", StringComparison.Ordinal);
-    if (!hub && !BelongsInModDirectory(file.Key)) continue;
-    string relative = hub ? hubRelative + file.Key.Substring(3) : modRelative + "/" + file.Key;
+    bool besideHub = !hub && BelongsBesideHub(file.Key);
+    if (!hub && !besideHub && !BelongsInModDirectory(file.Key)) continue;
+    string relative = hub ? hubRelative + file.Key.Substring(3)
+        : besideHub ? hubRelative + "/" + file.Key
+        : modRelative + "/" + file.Key;
     string path = ManagedPaths.Resolve(local, relative);
     if (File.Exists(path)) transaction.Write(backup + "/" + file.Key, File.ReadAllBytes(path));
     transaction.Write(relative, file.Value);

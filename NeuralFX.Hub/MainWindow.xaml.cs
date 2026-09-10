@@ -124,7 +124,9 @@ namespace NeuralFX.Hub
 
         private void UpdateProcessState()
         {
-            TxtGameProcess.Text = _hardwareInfo.IsGameRunning ? "En ejecución · ciérralo para modificar archivos" : "Cerrado · listo para instalar o desinstalar";
+            TxtGameProcess.Text = _hardwareInfo.IsGameRunning
+                ? "En ejecución · PID " + _pid + (_channel != null ? " · el mod publica telemetría" : " · sin telemetría del mod")
+                : "Cerrado · listo para instalar o desinstalar";
             TxtGameProcess.Foreground = (Brush)FindResource(_hardwareInfo.IsGameRunning ? "Danger" : "Success");
         }
 
@@ -139,11 +141,12 @@ namespace NeuralFX.Hub
                 { await RefreshDependenciesAsync(); _integrity.Invalidate(); }
                 int pid = await Task.Run(() => FindGameProcess(_hardwareInfo.GameExePath));
                 if (_closed || root != GameDirectory) return;
-                _hardwareInfo.IsGameRunning = pid != 0; UpdateProcessState();
+                _hardwareInfo.IsGameRunning = pid != 0;
                 if (pid != _pid || _channel == null)
                 {
                     _channel?.Dispose(); _channel = pid > 0 ? TelemetryChannel.Open(pid, false) : null; _pid = pid; _lastFrame = default;
                 }
+                UpdateProcessState();   // después de resolver el canal: el texto nombra el PID y si hay telemetría
                 long revision = _integrity.Revision;
                 if (root != null && revision != _scannedRevision)
                 {
@@ -233,7 +236,14 @@ namespace NeuralFX.Hub
                 : "Lanza Cities: Skylines por Steam.";
 
             if (canCloseGame && afterClosing.CanInstall)
-                BtnInstall.Content = "Cerrar el juego y " + guidance.InstallLabel.Substring(0, 1).ToLowerInvariant() + guidance.InstallLabel.Substring(1);
+            {
+                // "Instalar en el juego" + "Cerrar el juego" repetiria el complemento; y en
+                // castellano la conjuncion cambia delante de i-.
+                string action = guidance.InstallLabel.Replace(" en el juego", "");
+                action = action.Substring(0, 1).ToLowerInvariant() + action.Substring(1);
+                BtnInstall.Content = (action.StartsWith("i", StringComparison.Ordinal) || action.StartsWith("hi", StringComparison.Ordinal)
+                    ? "Cerrar el juego e " : "Cerrar el juego y ") + action;
+            }
 
             TxtInstallHint.Text = canCloseGame && afterClosing.CanInstall
                 ? "Se cerrará Cities: Skylines, se escribirán los archivos y se volverá a abrir. Guarda la ciudad antes."
@@ -256,17 +266,30 @@ namespace NeuralFX.Hub
                 "\n\nLos hashes verifican integridad de archivos. La compatibilidad, la carga y NR se comprueban por separado.";
         }
 
+        // Leer MainModule puede fallar por permisos o por una carrera al arrancar; cuando eso
+        // pasa el proceso existe igualmente, y darlo por cerrado llevaba al Hub a intentar
+        // escribir sobre archivos que el juego tiene abiertos.
         private static int FindGameProcess(string expectedPath)
         {
+            int unverified = 0;
             foreach (var process in Process.GetProcessesByName("Cities"))
             {
                 using (process)
                 {
-                    try { if (string.Equals(process.MainModule?.FileName, expectedPath, StringComparison.OrdinalIgnoreCase)) return process.Id; }
-                    catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { }
+                    try
+                    {
+                        string? actual = process.MainModule?.FileName;
+                        if (actual == null) { unverified = process.Id; continue; }
+                        if (string.IsNullOrEmpty(expectedPath)) { unverified = process.Id; continue; }
+                        if (string.Equals(Path.GetFullPath(actual), Path.GetFullPath(expectedPath), StringComparison.OrdinalIgnoreCase)) return process.Id;
+                    }
+                    catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException)
+                    {
+                        unverified = process.Id;
+                    }
                 }
             }
-            return 0;
+            return unverified;
         }
 
         private void ReadTelemetry()
