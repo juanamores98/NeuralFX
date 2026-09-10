@@ -31,6 +31,8 @@ namespace NeuralFX
         /// <summary>Ultima salud publicada por el puente. Size=0 si este puente no la trae.</summary>
         internal Rendering.NativeHealth Health { get; private set; }
         public string BridgeReason { get { return _bridge.Reason; } }
+        /// <summary>Por qué la ruta de vectores de Unity entró o no. Null si no hay cámara.</summary>
+        internal string MotionState { get { return _temporal != null ? _temporal.MotionState : null; } }
         public static void ToggleWindow() { if (_instance != null) _instance._panel.Toggle(); }
         public void Awake()
         {
@@ -133,7 +135,7 @@ namespace NeuralFX
             };
             if (_channel != null) _channel.Publish(CurrentFrame);
             Config.SessionLog.Tick(now, CurrentFrame, Health, _fps, _frameMs, ControlMessage,
-                _conflicts.Length == 0 ? null : "AA adicional: " + string.Join(", ", _conflicts));
+                _conflicts.Length == 0 ? null : "AA adicional: " + string.Join(", ", _conflicts), MotionState);
             if (_panel.Visible) _panel.Update(CurrentFrame,
                 !string.IsNullOrEmpty(ModSettings.LastSaveError) ? "Guardado pendiente: " + ModSettings.LastSaveError :
                 _temporal != null && _temporal.RestoreConflict ? "Se conserva un cambio posterior de otro mod en la cámara." :

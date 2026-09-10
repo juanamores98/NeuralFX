@@ -27,7 +27,7 @@ namespace NeuralFX.Config
         }
 
         /// <summary>Escribe si toca. Devuelve true si acaba de escribir una entrada.</summary>
-        public static bool Tick(float now, TelemetryFrame frame, Rendering.NativeHealth health, float fps, float frameMs, string controlMessage, string conflicts)
+        public static bool Tick(float now, TelemetryFrame frame, Rendering.NativeHealth health, float fps, float frameMs, string controlMessage, string conflicts, string motionState)
         {
             if (!ModSettings.EnableSessionLog || _failures >= MaxFailures) return false;
             string summary = SessionViewState.Summary(frame);
@@ -53,6 +53,7 @@ namespace NeuralFX.Config
                     .Append(" · presentado ").Append(frame.DisplayWidth).Append('x').Append(frame.DisplayHeight)
                     .Append(" · trabajo ").Append(frame.WorkWidth).Append('x').Append(frame.WorkHeight).Append('\n');
                 line.Append("  movimiento=").Append(frame.MotionProvider)
+                    .Append(string.IsNullOrEmpty(motionState) ? "" : " (Unity: " + motionState + ")")
                     .Append(" flags=").Append((int)frame.Flags)
                     .Append(" grabado/enviado/completado/incorporado=").Append(frame.RecordedFrame).Append('/').Append(frame.SubmittedFrame)
                     .Append('/').Append(frame.CompletedFrame).Append('/').Append(frame.OutputFrame)

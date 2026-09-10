@@ -7,6 +7,8 @@ namespace NeuralFX.Rendering
     {
         public NativeBridge Bridge;
         public int ResetSerial { get; set; }
+        /// <summary>Por qué la ruta de vectores de Unity entró o no en este frame.</summary>
+        public string MotionState { get; private set; }
         private Camera _camera;
         private CommandBuffer _event;
         private readonly FrameCoordinator _frames = new FrameCoordinator();
@@ -43,10 +45,24 @@ namespace NeuralFX.Rendering
             if (_event == null) { _event = new CommandBuffer { name = "NeuralFX current-camera capture and token" }; _camera.AddCommandBuffer(CameraEvent.AfterEverything, _event); }
             uint cameraId = unchecked((uint)_camera.GetInstanceID());
             uint motion = 0;
-            if (ModSettings.ExperimentalOptIn && ModSettings.EnableNativeMotionVectors && (Bridge.Capabilities.Supported & 16) != 0)
+            if (!ModSettings.ExperimentalOptIn || !ModSettings.EnableNativeMotionVectors) MotionState = "no solicitado";
+            else if ((Bridge.Capabilities.Supported & 16) == 0) MotionState = "sin capacidad del puente";
+            else
             {
                 EnsureCameraModes();
-                if (_inputs.Prepare(Bridge, cameraId, _frames.Epoch, width, height)) motion = _inputs.Record(_event);
+                // La cámara de CS1 no ocupa toda la pantalla: su rect deja fuera la franja
+                // inferior. Los vectores se reservan al tamaño del frame anunciado y se copian
+                // al hueco que la cámara ocupa dentro de él; el factor lleva la UV del destino
+                // a la del origen. Un blit directo los estiraría un 11,7% en vertical y cada
+                // píxel leería el movimiento de otra fila.
+                Rect view = _camera.pixelRect;
+                int x = Mathf.RoundToInt(view.x), y = Mathf.RoundToInt(view.y);
+                if (!_inputs.Prepare(Bridge, cameraId, _frames.Epoch, presentWidth, presentHeight)) MotionState = "reserva rechazada";
+                else
+                {
+                    motion = _inputs.Record(_event, width, height, x, y);
+                    MotionState = motion != 0 ? "enviado " + width + "x" + height + " en " + x + "," + y : "sin turno libre";
+                }
             }
             var frame = new NativeFrame {
                 Size = 64, Version = 3, Magic = 0x4e465833, Frame = _frames.NextFrame(), ResetSerial = unchecked((uint)ResetSerial),
