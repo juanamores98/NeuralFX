@@ -1,4 +1,4 @@
-[
+﻿[
   {
     "Id": "reshade_addon",
     "DisplayName": "ReShade 6.8.0 con add-ons",
@@ -19,17 +19,17 @@
   {
     "Id": "dlss5_feeder",
     "DisplayName": "DLSS5-Feeder · efecto companion",
-    "Description": "Efecto compatible con el puente NeuralFX basado en beta.4.",
+    "Description": "Efecto compatible con el puente NeuralFX basado en 0.15.1. El shader es byte a byte el mismo que en beta.4.",
     "Category": 1,
     "TargetRelativePath": "reshade-shaders/Shaders/DLSS5_Feed.fx",
     "SourceType": "PublicDownload",
     "CanAutoDownload": true,
-    "DownloadUrl": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v0.14.0-beta.4/DLSS5-Feeder-0.14.0-beta.4.zip",
+    "DownloadUrl": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v0.15.1/DLSS5-Feeder-0.15.1.zip",
     "OfficialWebUrl": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases",
     "ReleaseRepository": "jlrouzies-fr/DLSS5-Feeder",
     "DownloadType": "ZipExtract",
-    "ExpectedSha256": "7ee5d63e0674129e263d991c167466ea38909ff9358c2f07eb02a13cef70933f",
-    "Version": "v0.14.0-beta.4",
+    "ExpectedSha256": "2e44e81e691e75e532b9b7babc278a12615cb7f0fd9ef854da50e6ef17b272f4",
+    "Version": "v0.15.1",
     "PackageFiles": {
       "DLSS5_Feed.fx": "reshade-shaders/Shaders/DLSS5_Feed.fx"
     },
@@ -203,13 +203,13 @@
   },
   {
     "Id": "neuralfx_bridge",
-    "DisplayName": "Puente NeuralFX · feeder beta.4",
+    "DisplayName": "Puente NeuralFX · feeder 0.15.1",
     "Description": "ABI 3: reset, control de sesión, entradas registradas y confirmación GPU del portador. NR permanece sin confirmar.",
     "Category": 1,
     "TargetRelativePath": "dlss5-feed.addon64",
     "SourceType": "Bundled",
     "CanAutoDownload": false,
-    "Version": "0.14.0-beta.4-neuralfx.4",
+    "Version": "0.15.1-neuralfx.5",
     "OfficialWebUrl": "https://github.com/juanamores98/NeuralFX"
   }
 ]

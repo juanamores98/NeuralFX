@@ -21,3 +21,4 @@ artifacts/
 
 # Lienzo de diseño sembrado: se regenera con docs/design/*.dc.html + canvas.json
 docs/design/neuralfx-rediseno.html
+Native/upstream-beta4/

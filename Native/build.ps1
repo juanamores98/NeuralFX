@@ -2,9 +2,9 @@ param([string]$ToolchainPath = (Join-Path $PSScriptRoot 'toolchain'), [switch]$S
 $ErrorActionPreference = 'Stop'
 $nativeRoot = $PSScriptRoot
 $upstreamRoot = Join-Path $nativeRoot 'upstream'
-$commit = '927d76d30e888bce497f5c5f8d496fcb696da335'
+$commit = '3f624855276c4bde55145c712782477639b30e85'
 if (-not (Test-Path -LiteralPath $upstreamRoot)) {
-    & git clone --depth 1 --branch v0.14.0-beta.4 https://github.com/jlrouzies-fr/DLSS5-Feeder.git $upstreamRoot
+    & git clone --depth 1 --branch v0.15.1 https://github.com/jlrouzies-fr/DLSS5-Feeder.git $upstreamRoot
     if ($LASTEXITCODE -ne 0) { throw 'Clone failed' }
 }
 $actual = & git -C $upstreamRoot rev-parse HEAD
@@ -18,7 +18,7 @@ function Replace-Once([string]$Text, [string]$Before, [string]$After) {
     if (($Text.Split(@($Before), [StringSplitOptions]::None).Count - 1) -ne 1) { throw "Native patch marker missing or ambiguous: $Before" }
     return $Text.Replace($Before, $After)
 }
-$source = Replace-Once $source '#define FEED_VERSION "0.14.0-beta.4"' ('#include "neuralfx_inputs.h"' + "`n" + '#define FEED_VERSION "0.14.0-beta.4-neuralfx.4"')
+$source = Replace-Once $source '#define FEED_VERSION "0.15.1"' ('#include "neuralfx_inputs.h"' + "`n" + '#define FEED_VERSION "0.15.1-neuralfx.5"')
 $source = Replace-Once $source '    CK("queue Signal(fence12)");' @'
     CK("queue Signal(fence12)");
     if (FAILED(neuralfx_signal) || FAILED(g.dev12->GetDeviceRemovedReason()))
@@ -108,21 +108,19 @@ $body = Replace-Once $body 'AbortCommands();  // never execute a list NGX crashe
 $body = Replace-Once $body @'
             g.ctx4->Signal(g.fence11, v_in);
             ctx->Flush();
-            g.queue->Wait(g.fence12, v_in);
+
+            if (!BeginCommands()) { FeedFail("command list"); ok = false; }
 '@ @'
             const HRESULT neuralfx_signal = g.ctx4->Signal(g.fence11, v_in);
-            HRESULT neuralfx_input_wait = neuralfx_signal;
-            if (SUCCEEDED(neuralfx_signal)) {
-                ctx->Flush();
-                neuralfx_input_wait = g.queue->Wait(g.fence12, v_in);
-            }
-            if (FAILED(neuralfx_signal) || FAILED(neuralfx_input_wait)) {
-                NeuralFxRecorded(neuralfx_frame, static_cast<int32_t>(FAILED(neuralfx_signal) ? neuralfx_signal : neuralfx_input_wait), false, g.width, g.height, neuralfx_motion.provider);
-                FeedDisable("Input fence failed; preserving the current scene");
+            ctx->Flush();
+
+            if (FAILED(neuralfx_signal)) {
+                NeuralFxRecorded(neuralfx_frame, static_cast<int32_t>(neuralfx_signal), false, g.width, g.height, neuralfx_motion.provider);
+                FeedDisable("Input fence signal failed; preserving the current scene");
                 ok = false;
             }
+            else if (!BeginCommands()) { FeedFail("command list"); ok = false; }
 '@
-$body = Replace-Once $body '            if (!BeginCommands()) { FeedFail("command list"); ok = false; }' '            if (!ok) {} else if (!BeginCommands()) { FeedFail("command list"); ok = false; }'
 $body = Replace-Once $body 'const UINT64 v_out = EndCommands();' @'
 const UINT64 v_out = EndCommands();
                 NeuralFxRecorded(neuralfx_frame, NVSDK_NGX_FAILED(re) ? static_cast<int32_t>(re) : (v_out ? 0 : -1), v_out != 0, g.width, g.height, neuralfx_motion.provider);
