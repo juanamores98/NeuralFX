@@ -12,7 +12,25 @@ namespace NeuralFX
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)] private static extern uint GetModuleFileNameW(IntPtr module, StringBuilder path, int count);
         [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true)] public static extern IntPtr GetProcAddress(IntPtr module, string name);
         [DllImport("kernel32.dll")] public static extern int GetCurrentProcessId();
-        public static string GetGameDirectory() { return Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory).TrimEnd('\\', '/'); }
+        // La carpeta del juego se toma del propio ejecutable en ejecucion: BaseDirectory del
+        // AppDomain no siempre apunta ahi bajo Mono, y con eso ReShade, el feeder y el consumidor
+        // se daban por no cargados aunque los tres estuvieran dentro del proceso.
+        public static string GetGameDirectory()
+        {
+            try
+            {
+                var path = new StringBuilder(32768);
+                uint length = GetModuleFileNameW(IntPtr.Zero, path, path.Capacity);
+                if (length != 0 && length < path.Capacity)
+                {
+                    string directory = Path.GetDirectoryName(Path.GetFullPath(path.ToString()));
+                    if (!string.IsNullOrEmpty(directory)) return Normalize(directory);
+                }
+            }
+            catch { }
+            return Normalize(Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory));
+        }
+        private static string Normalize(string path) { return path.Replace('/', '\\').TrimEnd('\\'); }
         public static bool IsReShadeHooked()
         {
             IntPtr handle = LocalModule("dxgi.dll");
@@ -29,8 +47,9 @@ namespace NeuralFX
                 var path = new StringBuilder(32768);
                 uint length = GetModuleFileNameW(handle, path, path.Capacity);
                 if (length == 0 || length >= path.Capacity) return IntPtr.Zero;
-                string expected = Path.GetFullPath(Path.Combine(GetGameDirectory(), name));
-                return string.Equals(expected, Path.GetFullPath(path.ToString()), StringComparison.OrdinalIgnoreCase) ? handle : IntPtr.Zero;
+                string actual = Normalize(Path.GetFullPath(path.ToString()));
+                string expected = Normalize(Path.Combine(GetGameDirectory(), name));
+                return string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase) ? handle : IntPtr.Zero;
             }
             catch { return IntPtr.Zero; }
         }
