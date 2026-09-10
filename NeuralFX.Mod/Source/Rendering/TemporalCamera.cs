@@ -28,9 +28,10 @@ namespace NeuralFX.Rendering
             _projection.Restore();
             if (_camera == null || Bridge == null || !Bridge.Connected || !ModSettings.PipelineEnabled) { _modes.Release(); return; }
             if (!ModSettings.ExperimentalOptIn || (!ModSettings.EnableNativeMotionVectors && !ModSettings.ForceMotionVectorsOnLoad)) { _modes.Release(); _inputs.Release(); }
-            // La cámara de CS1 no ocupa todo el backbuffer: aquí mide 1920x967 sobre una escena
-            // de 1920x1080. El frame que se anuncia describe lo que ReShade verá en Present, así
-            // que va con el tamaño de pantalla; las texturas registradas siguen siendo de cámara.
+            // La cámara de CS1 no ocupa todo el backbuffer: su rect es (0, 0.105, 1, 0.895), de
+            // modo que mide 3840x1933 sobre una pantalla de 3840x2160 y la franja de abajo queda
+            // para la barra de herramientas. El frame anunciado describe lo que ReShade verá en
+            // Present, así que va con el tamaño de pantalla.
             int width = _camera.pixelWidth, height = _camera.pixelHeight;
             int presentWidth = Screen.width, presentHeight = Screen.height;
             if (width <= 0 || height <= 0 || width > Bridge.Capabilities.MaxDimension || height > Bridge.Capabilities.MaxDimension) return;
@@ -50,14 +51,13 @@ namespace NeuralFX.Rendering
             else
             {
                 EnsureCameraModes();
-                // La cámara de CS1 no ocupa toda la pantalla: su rect deja fuera la franja
-                // inferior. Los vectores se reservan al tamaño del frame anunciado y se copian
-                // al hueco que la cámara ocupa dentro de él; el factor lleva la UV del destino
-                // a la del origen. Un blit directo los estiraría un 11,7% en vertical y cada
-                // píxel leería el movimiento de otra fila.
+                // Los vectores se reservan al tamaño del frame anunciado y se copian al hueco
+                // que la cámara ocupa dentro de él, que es lo que dice pixelRect. Un blit
+                // directo los estiraría un 11,7% en vertical y cada píxel leería el movimiento
+                // de otra fila.
                 Rect view = _camera.pixelRect;
                 int x = Mathf.RoundToInt(view.x), y = Mathf.RoundToInt(view.y);
-                if (!_inputs.Prepare(Bridge, cameraId, _frames.Epoch, presentWidth, presentHeight)) MotionState = "reserva rechazada";
+                if (!_inputs.Prepare(Bridge, cameraId, _frames.Epoch, presentWidth, presentHeight)) MotionState = "reserva rechazada: " + _inputs.Failure;
                 else
                 {
                     motion = _inputs.Record(_event, width, height, x, y);

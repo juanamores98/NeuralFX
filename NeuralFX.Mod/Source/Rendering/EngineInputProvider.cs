@@ -23,26 +23,35 @@ namespace NeuralFX.Rendering
         private NativeBridge _bridge;
         private int _width, _height;
         private uint _epoch;
+        /// <summary>Qué comprobación tumbó la última reserva. Null si salió bien.</summary>
+        public string Failure { get; private set; }
         public bool Prepare(NativeBridge bridge, uint camera, uint epoch, int width, int height)
         {
             if (_epoch == epoch && width == _width && height == _height) return true;
-            Release(); _bridge = bridge;
-            if (!SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.RGHalf)) return false;
+            // Una carencia del equipo no cambia entre fotogramas: se comprueba una vez y se
+            // recuerda. Reevaluarla en cada frame solo serviría para repetir el mismo no.
+            if (Failure != null && _hardware) return false;
+            Release(); _bridge = bridge; Failure = null;
+            if (!SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.RGHalf))
+            { Failure = "el equipo no da RGHalf"; _hardware = true; return false; }
             // Sin copia por región no hay forma de colocar el bloque en su sitio, y estirarlo
             // sería peor que no mandarlo: se vuelve al descriptor óptico completo.
-            if ((SystemInfo.copyTextureSupport & CopyTextureSupport.Basic) == 0) return false;
+            if ((SystemInfo.copyTextureSupport & CopyTextureSupport.Basic) == 0)
+            { Failure = "sin copia por región (" + SystemInfo.copyTextureSupport + ")"; _hardware = true; return false; }
             for (int i = 0; i < 3; i++)
             {
                 var texture = new RenderTexture(width, height, 0, RenderTextureFormat.RGHalf, RenderTextureReadWrite.Linear);
                 texture.name = "NeuralFX motion " + i; texture.useMipMap = false; texture.filterMode = FilterMode.Point;
                 _textures[i] = texture;
-                if (!texture.Create()) { Release(); return false; }
+                if (!texture.Create()) { Failure = "no se pudo crear la textura " + i + " de " + width + "x" + height; Release(); return false; }
                 // La franja sin escena no se escribe nunca más: se pone a cero una sola vez, al
                 // reservar. Un contenido indefinido ahí sería movimiento inventado.
                 RenderTexture previous = RenderTexture.active;
                 RenderTexture.active = texture; GL.Clear(false, true, Color.clear); RenderTexture.active = previous;
-                _handles[i] = bridge.RegisterMotion(texture.GetNativeTexturePtr(), camera, epoch);
-                if (_handles[i] == 0) { Release(); return false; }
+                System.IntPtr pointer = texture.GetNativeTexturePtr();
+                _handles[i] = bridge.RegisterMotion(pointer, camera, epoch);
+                if (_handles[i] == 0)
+                { Failure = "el puente rechazó la textura " + i + (pointer == System.IntPtr.Zero ? " (sin puntero nativo)" : " (aa=" + texture.antiAliasing + ")"); Release(); return false; }
             }
             _width = width; _height = height; _epoch = epoch; return true;
         }
@@ -64,6 +73,7 @@ namespace NeuralFX.Rendering
             }
             return 0; // GPU behind / unavailable: select the complete optical descriptor.
         }
+        private bool _hardware;
         public void Release()
         {
             for (int i = 0; i < 3; ++i) {
