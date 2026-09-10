@@ -186,7 +186,12 @@ namespace NeuralFX.UI
             _dot.color = DotColor(frame);
             string motion = frame.MotionProvider == 2 ? "movimiento Unity (sin validar)" : frame.MotionProvider == 1 ? "movimiento óptico" : "sin movimiento confirmado";
             Set(_sub, "Puente build " + frame.BridgeBuild + " · " + motion + " · UI " +
-                (SessionViewState.Has(frame, RuntimeFlags.UiIsolated) ? "protegida" : "no aislada"));
+                (SessionViewState.Has(frame, RuntimeFlags.UiIsolated) ? "protegida" : "no aislada") +
+                // El consumidor fijado no publica confirmación por frame, así que "sin confirmar"
+                // es el estado correcto incluso cuando NR se está ejecutando. Decirlo evita la duda.
+                (SessionViewState.Has(frame, RuntimeFlags.EvaluationSucceeded) && !SessionViewState.Has(frame, RuntimeFlags.NrConfirmed)
+                    ? "\nEl consumidor fijado no confirma NR por frame; comprueba las evaluaciones en ReShade.log."
+                    : ""));
 
             Set(_metricValues[0], frame.Fps.ToString("F1"));
             Set(_metricValues[1], frame.FrameMs.ToString("F1") + " ms");
