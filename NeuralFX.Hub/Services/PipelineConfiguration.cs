@@ -39,6 +39,14 @@ namespace NeuralFX.Hub.Services
             // ningún vector de movimiento. 0 = sin comprobación de aspecto; la elección la decide
             // la estadística de dibujado, que es la que sabe cuál es el buffer de la escena.
             ini = Ini.Set(ini, "DEPTH", "UseAspectRatioHeuristics", "0");
+            // Quitar el filtro de aspecto abre la puerta pero no la fija: la eleccion queda a
+            // merced de la estadistica de dibujado y cambia entre arranques. Estas dos la acotan.
+            // FilterFormat=5 es la familia D32 en check_depth_format (d32_float / r32_float /
+            // r32_typeless) y es la que el feeder ve en CS1: "depth R32_FLOAT (reversed)".
+            ini = Ini.Set(ini, "DEPTH", "FilterFormat", "5");
+            // DepthCopyBeforeClears=1 es el remedio que la propia interfaz de ReShade recomienda
+            // para este sintoma exacto: "Enable this when the depth buffer is empty".
+            ini = Ini.Set(ini, "DEPTH", "DepthCopyBeforeClears", "1");
             ini = Ini.Set(ini, "GENERAL", "IntermediateCachePath", @".\.neuralfx-runtime\ReShade");
             ini = Ini.Set(ini, "SCREENSHOT", "SavePath", @".\.neuralfx-runtime\Capturas");
             string definitions = Ini.Get(ini, "GENERAL", "PreprocessorDefinitions");
