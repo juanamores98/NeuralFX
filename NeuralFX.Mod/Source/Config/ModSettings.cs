@@ -21,6 +21,7 @@ namespace NeuralFX.Config
         public bool EnableHotkey = true;
         public bool EnableUui = true;
         public bool EnableMainMenuButton = true;
+        public bool EnableSessionLog = true;
         public int SchemaVersion = 0;
         public float PanelX = 40f;
         public float PanelY = 80f;
@@ -86,6 +87,11 @@ namespace NeuralFX.Config
             set => _data.EnableHotkey = value;
         }
 
+        public static bool EnableSessionLog
+        {
+            get => _data.EnableSessionLog;
+            set { _data.EnableSessionLog = value; if (!value) SessionLog.Reset(); }
+        }
         public static bool EnableMainMenuButton
         {
             get => _data.EnableMainMenuButton;

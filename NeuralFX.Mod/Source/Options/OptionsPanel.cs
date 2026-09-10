@@ -17,6 +17,17 @@ namespace NeuralFX.Options
             var status = helper.AddGroup("Estado");
             var label = Note(status, "Esperando estado...");
             if (label != null) label.gameObject.AddComponent<OptionsStatus>().Label = label;
+            status.AddCheckbox("Registrar telemetría de la sesión en disco", ModSettings.EnableSessionLog, value => { ModSettings.EnableSessionLog = value; ModSettings.Save(); });
+            Note(status, "Una entrada cada cinco segundos, y una más en cada cambio de estado, en %LOCALAPPDATA%\\NeuralFX\\Diagnostics. Déjala encendida mientras se depura.");
+            status.AddButton("Abrir la carpeta de diagnósticos", () => {
+                try
+                {
+                    string folder = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NeuralFX/Diagnostics");
+                    System.IO.Directory.CreateDirectory(folder);
+                    Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+                }
+                catch (Exception ex) { if (label != null) label.text = ex.Message; }
+            });
             status.AddButton("Reintentar guardado de preferencias", () => { ModSettings.Save(); if (label != null) label.text = ModSettings.LastSaveError ?? "Preferencias guardadas"; });
             Note(status, ModSettings.MigrationNotice);
 

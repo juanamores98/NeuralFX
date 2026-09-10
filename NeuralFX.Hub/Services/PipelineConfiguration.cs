@@ -33,6 +33,12 @@ namespace NeuralFX.Hub.Services
             ini = Ini.Set(ini, "GENERAL", "NoDebugInfo", "1");
             ini = Ini.Set(ini, "GENERAL", "NoEffectCache", "0");
             ini = Ini.Set(ini, "DEPTH", "DrawStatsHeuristic", "2");
+            // La cámara de CS1 no ocupa el backbuffer: 1920x967 sobre 1920x1080. La heurística de
+            // aspecto de ReShade 6.8 (generic_depth_addon.cpp) exige |1.7778 - 1.9855| <= 0.1 y
+            // descarta ese buffer, así que DLSS recibía profundidad plana y, con VALIDATE_DEPTH,
+            // ningún vector de movimiento. 0 = sin comprobación de aspecto; la elección la decide
+            // la estadística de dibujado, que es la que sabe cuál es el buffer de la escena.
+            ini = Ini.Set(ini, "DEPTH", "UseAspectRatioHeuristics", "0");
             ini = Ini.Set(ini, "GENERAL", "IntermediateCachePath", @".\.neuralfx-runtime\ReShade");
             ini = Ini.Set(ini, "SCREENSHOT", "SavePath", @".\.neuralfx-runtime\Capturas");
             string definitions = Ini.Get(ini, "GENERAL", "PreprocessorDefinitions");

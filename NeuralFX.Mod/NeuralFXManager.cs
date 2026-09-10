@@ -129,6 +129,8 @@ namespace NeuralFX
                 CommandResult = _commandResult, CommandReason = _commandReason, ControlsRevision=controls.Revision, ControlsResult=controlResult, RequestedWork=controls.WorkPercent, RequestedSharpness=controls.Sharpness
             };
             if (_channel != null) _channel.Publish(CurrentFrame);
+            Config.SessionLog.Tick(now, CurrentFrame, _fps, _frameMs, ControlMessage,
+                _conflicts.Length == 0 ? null : "AA adicional: " + string.Join(", ", _conflicts));
             if (_panel.Visible) _panel.Update(CurrentFrame,
                 !string.IsNullOrEmpty(ModSettings.LastSaveError) ? "Guardado pendiente: " + ModSettings.LastSaveError :
                 _temporal != null && _temporal.RestoreConflict ? "Se conserva un cambio posterior de otro mod en la cámara." :
