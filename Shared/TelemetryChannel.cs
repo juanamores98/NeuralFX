@@ -27,7 +27,7 @@ namespace NeuralFX.Protocol
         public uint BridgeBuild;
         public uint ControlsRevision; public int ControlsResult, RequestedWork; public float RequestedSharpness;
     }
-    public enum CommandKind { None = 0, TogglePanel = 1, ReapplyBuffers = 2, ResetHistory = 3, EnablePipeline = 4, DisablePipeline = 5, SetWorkResolution = 6, SetSharpness = 7 }
+    public enum CommandKind { None = 0, TogglePanel = 1, ReapplyBuffers = 2, ResetHistory = 3, EnablePipeline = 4, DisablePipeline = 5, SetWorkResolution = 6, SetSharpness = 7, QuitGame = 8 }
     public enum CommandResult { None = 0, Accepted = 1, Applied = 2, Rejected = 3 }
     [StructLayout(LayoutKind.Sequential, Pack = 8)]
     public struct TelemetryCommand { public int Magic, Version, Revision; public CommandKind Kind; public long SessionId; public long ExpiresUtcTicks; public int IntValue; public float FloatValue; }

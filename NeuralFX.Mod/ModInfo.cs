@@ -1,6 +1,7 @@
 using ICities;
 using NeuralFX.Config;
 using NeuralFX.Options;
+using NeuralFX.UI;
 
 namespace NeuralFX
 {
@@ -13,6 +14,7 @@ namespace NeuralFX
         public void OnEnabled()
         {
             ModSettings.Load();
+            if (ModSettings.EnableMainMenuButton) MainMenuButton.Install();
         }
 
         public void OnSettingsUI(UIHelperBase helper)

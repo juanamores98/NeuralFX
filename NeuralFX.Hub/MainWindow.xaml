@@ -283,8 +283,11 @@
                         <Button x:Name="BtnInstall" Content="Instalar en el juego" Click="BtnInstall_Click"
                                 Style="{StaticResource PrimaryButton}" VerticalAlignment="Center" />
                         <TextBlock x:Name="TxtInstallHint" Text="El juego debe estar cerrado mientras se escriben los archivos."
-                                   Style="{StaticResource SectionLabel}" TextWrapping="Wrap" MaxWidth="360"
+                                   Style="{StaticResource SectionLabel}" TextWrapping="Wrap" MaxWidth="300"
                                    VerticalAlignment="Center" Margin="16,0,0,0" LineHeight="17" />
+                        <!-- Abrir o cerrar CS1 sin salir del Hub: ReShade no se puede escribir con el juego abierto -->
+                        <Button x:Name="BtnGameProcess" Content="Abrir Cities: Skylines" Click="BtnGameProcess_Click"
+                                Margin="16,0,0,0" Padding="12,6" FontSize="12" VerticalAlignment="Center" />
                     </StackPanel>
 
                     <!-- Componentes: una línea, con el detalle plegado -->

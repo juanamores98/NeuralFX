@@ -25,7 +25,11 @@ $tuple = [ordered]@{ mode=$mode; sourceCommit=(& git -C $root rev-parse HEAD); w
 Get-ChildItem -LiteralPath $fixture -File | ForEach-Object { $tuple.files[$_.Name] = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
 $tuple | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $fixture 'tuple.json') -Encoding utf8
 $process = Start-Process -FilePath (Join-Path $fixture 'NeuralFX.Smoke.exe') -ArgumentList @($Width, $Height) -WorkingDirectory $fixture -WindowStyle Hidden -RedirectStandardOutput (Join-Path $fixture 'fixture.log') -PassThru
+# Tocar el Handle antes de esperar: sin esto Start-Process -PassThru deja ExitCode vacío
+# y toda corrida buena se informaba como fallo.
+$null = $process.Handle
 if (!$process.WaitForExit(55000)) { $process.Kill(); throw "Graphics fixture exceeded 55 seconds: $fixture" }
+$process.WaitForExit()
 Write-Output "Graphics fixture: $fixture"
 Get-Content -LiteralPath (Join-Path $fixture 'fixture.log')
 Get-Content -LiteralPath (Join-Path $fixture 'dlss5-feed.log') -Tail 15

@@ -20,6 +20,7 @@ namespace NeuralFX.Config
         public bool WarnOnAaConflict = true;
         public bool EnableHotkey = true;
         public bool EnableUui = true;
+        public bool EnableMainMenuButton = true;
         public int SchemaVersion = 0;
         public float PanelX = 40f;
         public float PanelY = 80f;
@@ -85,6 +86,11 @@ namespace NeuralFX.Config
             set => _data.EnableHotkey = value;
         }
 
+        public static bool EnableMainMenuButton
+        {
+            get => _data.EnableMainMenuButton;
+            set => _data.EnableMainMenuButton = value;
+        }
         public static bool EnableUui
         {
             get => _data.EnableUui;

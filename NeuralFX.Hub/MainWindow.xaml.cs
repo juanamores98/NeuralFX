@@ -219,6 +219,15 @@ namespace NeuralFX.Hub
                 BtnUninstall.IsEnabled = false;
             }
 
+            bool connected = _channel != null && _pid != 0;
+            BtnGameProcess.Content = _hardwareInfo.IsGameRunning ? "Cerrar el juego" : "Abrir Cities: Skylines";
+            BtnGameProcess.IsEnabled = !_busy && (!_hardwareInfo.IsGameRunning || connected);
+            BtnGameProcess.ToolTip = _hardwareInfo.IsGameRunning
+                ? connected
+                    ? "Pide al mod que cierre el juego por la salida normal. Guarda antes: no se guarda la ciudad por ti."
+                    : "El juego est\u00e1 abierto pero el mod no publica telemetr\u00eda; ci\u00e9rralo desde el propio juego."
+                : "Lanza Cities: Skylines por Steam.";
+
             TxtInstallHint.Text = _hardwareInfo.IsGameRunning
                 ? "Cierra Cities: Skylines para poder escribir en su carpeta."
                 : !_hardwareInfo.CanWriteGameDir ? "Sin permiso de escritura en la carpeta del juego."
@@ -315,6 +324,39 @@ namespace NeuralFX.Hub
         }
 
         private async void BtnRefreshDiagnostics_Click(object sender, RoutedEventArgs e) => await RunFullDiagnosticsAsync();
+
+        // Abrir y cerrar CS1 desde el Hub. El cierre viaja por el mismo canal de comandos que el
+        // resto: el mod ejecuta la salida normal del juego. Nunca se termina el proceso a la fuerza,
+        // porque eso s\u00ed perder\u00eda la ciudad sin remedio.
+        private void BtnGameProcess_Click(object sender, RoutedEventArgs e)
+        {
+            if (_hardwareInfo.IsGameRunning)
+            {
+                if (_channel == null || _pid == 0)
+                {
+                    SetNotice("No se puede cerrar el juego desde aqu\u00ed",
+                        "El proceso est\u00e1 abierto pero el mod no publica telemetr\u00eda. Ci\u00e9rralo desde el propio juego.", false);
+                    return;
+                }
+                if (MessageBox.Show(this,
+                        "Se pedir\u00e1 al juego que se cierre por su salida normal.\n\nGuarda la ciudad antes: NeuralFX no la guarda por ti.",
+                        "Cerrar Cities: Skylines", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+                SendTelemetryCommand(CommandKind.QuitGame.ToString());
+                SetNotice("Cierre solicitado", "Esperando a que Cities: Skylines termine de cerrarse.");
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo("steam://rungameid/255710") { UseShellExecute = true });
+                SetNotice("Abriendo Cities: Skylines", "Lanzado a trav\u00e9s de Steam. El Hub seguir\u00e1 el proceso cuando arranque.");
+            }
+            catch (Exception ex)
+            {
+                LogHub("Lanzar el juego: " + ex.Message);
+                SetNotice("No se pudo lanzar el juego", ex.Message + " \u00c1brelo desde Steam.", false);
+            }
+        }
 
         private async void BtnBrowseGame_Click(object sender, RoutedEventArgs e)
         {

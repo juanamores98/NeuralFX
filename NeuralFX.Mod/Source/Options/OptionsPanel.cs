@@ -31,14 +31,10 @@ namespace NeuralFX.Options
             var access = helper.AddGroup("Acceso");
             access.AddCheckbox("Atajo Ctrl + Alt + N", ModSettings.EnableHotkey, value => { ModSettings.EnableHotkey = value; ModSettings.Save(); });
             access.AddCheckbox("Botón en Unified UI (se aplica al cargar ciudad)", ModSettings.EnableUui, value => { ModSettings.EnableUui = value; ModSettings.Save(); });
+            access.AddCheckbox("Botón NEURALFX en el menú principal (se aplica al reiniciar)", ModSettings.EnableMainMenuButton, value => { ModSettings.EnableMainMenuButton = value; ModSettings.Save(); });
             var action = Note(access, "");
             access.AddButton("Abrir el panel en ciudad", () => NeuralFXManager.ToggleWindow());
-            access.AddButton("Abrir NeuralFX Hub", () => Run(action, () => {
-                string exe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NeuralFX/Hub/NeuralFX.Hub.exe");
-                if (!File.Exists(exe)) throw new FileNotFoundException("Hub no instalado. Ejecuta Install-NeuralFX.ps1 desde el paquete compilado.");
-                Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(exe) });
-                return "Hub abierto";
-            }));
+            access.AddButton("Abrir NeuralFX Hub", () => { if (action != null) action.text = UI.HubLauncher.Open(); else UI.HubLauncher.Open(); });
             access.AddButton("Guardar informe de sesión", () => Run(action, () => {
                 string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NeuralFX/Diagnostics"); Directory.CreateDirectory(root);
                 string file = Path.Combine(root, "session-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + ".txt");

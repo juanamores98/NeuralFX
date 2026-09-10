@@ -16,6 +16,7 @@ namespace NeuralFX
         private TelemetryChannel _channel;
         private float _elapsed, _publishAt, _discoverAt, _hooksAt, _scanAt;
         private int _frames, _lastCommand;
+        private bool _quitRequested;
         private static int _resetSerial;
         private float _fps, _frameMs;
         private RuntimeFlags _moduleFlags;
@@ -83,6 +84,7 @@ namespace NeuralFX
                     _commandIsControl = true;
                     if (!SetSessionControls(command.Kind == CommandKind.SetWorkResolution ? command.IntValue : 0, command.Kind == CommandKind.SetSharpness ? command.FloatValue : -1)) { _commandResult = CommandResult.Rejected; _commandReason = 4; }
                 }
+                else if (command.Kind == CommandKind.QuitGame) { _commandResult = CommandResult.Applied; _quitRequested = true; }
                 else { _commandResult = CommandResult.Rejected; _commandReason = 2; }
                 _lastCommand = command.Revision;
             }
@@ -131,6 +133,9 @@ namespace NeuralFX
                 !string.IsNullOrEmpty(ModSettings.LastSaveError) ? "Guardado pendiente: " + ModSettings.LastSaveError :
                 _temporal != null && _temporal.RestoreConflict ? "Se conserva un cambio posterior de otro mod en la cámara." :
                 _conflicts.Length == 0 ? "" : "Revisar AA: " + string.Join(", ", _conflicts));
+            // Después de publicar, para que el Hub llegue a ver el comando como aplicado.
+            // Es la salida normal del juego, no una terminación del proceso.
+            if (_quitRequested) { _quitRequested = false; Application.Quit(); }
         }
         public bool SetSessionControls(int workPercent, float sharpness)
         {
