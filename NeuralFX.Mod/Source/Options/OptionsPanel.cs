@@ -19,6 +19,8 @@ namespace NeuralFX.Options
             if (label != null) label.gameObject.AddComponent<OptionsStatus>().Label = label;
             status.AddCheckbox("Registrar telemetría de la sesión en disco", ModSettings.EnableSessionLog, value => { ModSettings.EnableSessionLog = value; ModSettings.Save(); });
             Note(status, "Una entrada cada cinco segundos, y una más en cada cambio de estado, en %LOCALAPPDATA%\\NeuralFX\\Diagnostics. Déjala encendida mientras se depura.");
+            status.AddCheckbox("Anotar las cámaras de la escena en ese registro", ModSettings.EnableRenderTrace, value => { ModSettings.EnableRenderTrace = value; Rendering.RenderStageProbe.Restart(); ModSettings.Save(); });
+            Note(status, "Cada configuración de cámara distinta —nombre, orden, geometría, rect y destino— se anota una sola vez, la primera vez que aparece. Es lo que dice por qué la cámara mide 3840x1933 sobre un backbuffer de 3840x2160. Solo lee.");
             status.AddButton("Abrir la carpeta de diagnósticos", () => {
                 try
                 {
@@ -55,16 +57,13 @@ namespace NeuralFX.Options
             }));
 
             var experimental = helper.AddGroup("Pruebas experimentales");
-            UIComponent motion = null, trace = null;
+            UIComponent motion = null;
             experimental.AddCheckbox("Permitir capacidades sin validar", ModSettings.ExperimentalOptIn, value => {
                 ModSettings.ExperimentalOptIn = value; ModSettings.Save();
                 if (motion != null) motion.isEnabled = value;
-                if (trace != null) trace.isEnabled = value;
             });
             motion = experimental.AddCheckbox("Preferir vectores de movimiento de Unity", ModSettings.EnableNativeMotionVectors, value => { ModSettings.EnableNativeMotionVectors = value; ModSettings.Save(); }) as UIComponent;
-            trace = experimental.AddCheckbox("Capturar traza de cámaras (120 frames)", ModSettings.EnableRenderTrace, value => { ModSettings.EnableRenderTrace = value; Rendering.RenderStageProbe.Restart(); ModSettings.Save(); }) as UIComponent;
             if (motion != null) motion.isEnabled = ModSettings.ExperimentalOptIn;
-            if (trace != null) trace.isEnabled = ModSettings.ExperimentalOptIn;
             Note(experimental, "Los vectores de Unity necesitan puente ABI 3; su cobertura y su signo están sin validar en CS1 y, ante un rechazo, se vuelve al contrato óptico completo.");
             Note(experimental, "Jitter de cámara, SR interno y aislamiento de la UI siguen sin implementar. No aparecen aquí porque no harían nada.");
         }

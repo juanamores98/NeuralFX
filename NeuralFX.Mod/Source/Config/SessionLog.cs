@@ -70,6 +70,12 @@ namespace NeuralFX.Config
                         .Append(" · feed ").Append(health.FeedCpuMs.ToString("0.##")).Append(" ms CPU / ").Append(health.FeedGpuMs.ToString("0.##")).Append(" ms GPU")
                         .Append(" · intervalo ").Append(health.FrameIntervalMs.ToString("0.#")).Append(" ms · stalls ").Append(health.Stalls)
                         .Append('\n');
+                // Las cámaras van aquí y no en un informe aparte porque la pregunta abierta
+                // —por qué la cámara mide 3840x1933 sobre un backbuffer de 3840x2160— se
+                // contesta jugando normal, no pulsando un botón en el menú de opciones. Solo
+                // se escribe lo que no había aparecido antes.
+                string cameras = Rendering.RenderStageProbe.Drain();
+                if (!string.IsNullOrEmpty(cameras)) line.Append("  cámaras nuevas:\n").Append(cameras);
                 if (!string.IsNullOrEmpty(controlMessage)) line.Append("  ajuste: ").Append(controlMessage).Append('\n');
                 if (!string.IsNullOrEmpty(conflicts)) line.Append("  aviso: ").Append(conflicts).Append('\n');
                 File.AppendAllText(_path, line.ToString(), Encoding.UTF8);
