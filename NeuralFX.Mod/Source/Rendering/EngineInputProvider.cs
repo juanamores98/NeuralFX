@@ -28,10 +28,12 @@ namespace NeuralFX.Rendering
         public bool Prepare(NativeBridge bridge, uint camera, uint epoch, int width, int height)
         {
             if (_epoch == epoch && width == _width && height == _height) return true;
-            // Una carencia del equipo no cambia entre fotogramas: se comprueba una vez y se
-            // recuerda. Reevaluarla en cada frame solo serviría para repetir el mismo no.
-            if (Failure != null && _hardware) return false;
-            Release(); _bridge = bridge; Failure = null;
+            // Un no ya dado no se vuelve a pedir hasta que cambie algo. Una carencia del equipo
+            // no cambia nunca; un rechazo del puente, no dentro de la misma época. Sin esto la
+            // reserva se reintentaba en cada fotograma, y cada intento reservaba y destruía una
+            // textura de pantalla completa —33 MB a 4K— para recibir el mismo no.
+            if (Failure != null && (_hardware || _failedEpoch == epoch)) return false;
+            Release(); _bridge = bridge; Failure = null; _failedEpoch = epoch;
             if (!SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.RGHalf))
             { Failure = "el equipo no da RGHalf"; _hardware = true; return false; }
             // Sin copia por región no hay forma de colocar el bloque en su sitio, y estirarlo
@@ -74,6 +76,7 @@ namespace NeuralFX.Rendering
             return 0; // GPU behind / unavailable: select the complete optical descriptor.
         }
         private bool _hardware;
+        private uint _failedEpoch;
         public void Release()
         {
             for (int i = 0; i < 3; ++i) {

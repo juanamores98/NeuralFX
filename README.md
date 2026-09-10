@@ -38,7 +38,7 @@ El Hub vive con el mod, en `App/`, publicado como un único ejecutable sin DLL s
 - Envía el reset de cámara al hilo de render y a NGX. Rechaza jitter distinto de cero hasta disponer de una integración temporal completa.
 - Usa un panel Colossal arrastrable (`Ctrl + Alt + N`), sin `OnGUI`. ReShade se abre con `Home`, salvo que hayas personalizado su atajo.
 
-La ruta predeterminada consume **movimiento estimado por LumeniteFX**. La opción experimental copia vectores Unity a recursos propios registrados; su signo y cobertura de objetos necesitan validación en CS1. El panel nativo tampoco excluye la UI del procesamiento neural: esa fase sigue pendiente. No hay jitter de cámara ni resolución dinámica del render de Unity.
+La ruta predeterminada consume **movimiento estimado por LumeniteFX**, y hoy es la única que llega a ejercitarse. La opción experimental copia vectores Unity a recursos propios registrados, pero el puente rechaza la textura al registrarla y la sesión cae al descriptor óptico: ningún registro tiene el bit `NativeMotion`. Su signo y su cobertura de objetos siguen, por tanto, sin validar. Ver [la medida en ciudad](docs/VALIDACION.md). El panel nativo tampoco excluye la UI del procesamiento neural: esa fase sigue pendiente. No hay jitter de cámara ni resolución dinámica del render de Unity.
 
 ## Presets
 

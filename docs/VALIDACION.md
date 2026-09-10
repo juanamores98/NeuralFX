@@ -62,6 +62,43 @@ Los archivos aportados son versión 310.8.0 y tienen firma NVIDIA válida.
 
 La instalación antigua tenía Ray Reconstruction renombrado como NR. El importador nuevo comprueba el producto firmado y rechaza esa sustitución.
 
+## Medida en ciudad — 10 de septiembre de 2026
+
+Cuatro sesiones reales en la ciudad del usuario, con la telemetría de sesión y la traza de cámaras encendidas. Equipo: RTX 5080, controlador 616.92, CS1 a 3840×2160 en pantalla completa, antialiasing del juego desactivado. Registros en `%LOCALAPPDATA%\NeuralFX\Diagnostics`.
+
+### La cámara no ocupa el backbuffer, y es su rect
+
+```text
+Main Camera id=65224 orden=-2 3840x1933 rect=0,0.105 1x0.895 destino=pantalla 3840x2160
+```
+
+Misma cámara, dibujando directa a pantalla: no es otra cámara ni una textura intermedia. El rect `(0, 0.105, 1, 0.895)` deja la escena en las 1933 filas de arriba y la franja inferior —227 píxeles, donde va la barra de herramientas, que es opaca— sin escena. `Underground View` comparte el mismo rect, así que es sistémico. NeuralFX no lo escribe: no hay una sola asignación a `Camera.rect` en el mod.
+
+Es constante dentro de la ciudad. Los `3840x2160` de los registros son la salida al menú principal y transitorios de segundos, no bloques de juego: en la sesión de las 15:16, 30 de 266 muestras, y caen entre 15:36 y 15:38, al cerrar. **Una lectura anterior que los describía como alternancia dentro de la partida era incorrecta.**
+
+El frame anunciado sigue llevando el tamaño de pantalla, que es lo que ReShade ve en Present. Lo que cambia es que las texturas registradas ya no se reservan al tamaño de cámara.
+
+### Los vectores de movimiento de Unity nunca han entrado
+
+En **todas** las entradas de **todos** los registros, `flags` no tiene el bit 256 (`NativeMotion`) y `movimiento=1`: el pase temporal siempre ha corrido con flujo óptico estimado de la imagen, no con vectores reales. Con desplazamientos medidos de 5 a 201 px, eso basta para explicar el arrastre al mover la cámara.
+
+Dos obstáculos, en este orden:
+
+1. El selector nativo exige que la textura registrada mida lo mismo que el frame anunciado (`Native/neuralfx_inputs.h`). Se reservaba a tamaño de cámara: 3840×1933 contra 3840×2160. **Corregido** — se reserva al tamaño del frame y los vectores se colocan por copia de región en el hueco que la cámara ocupa. Un blit los habría estirado un 11,7 % en vertical.
+2. **Abierto.** `NeuralFX_RegisterMotion` rechaza la primera textura, con puntero nativo válido y `antiAliasing=1`. La reserva nunca llega al selector, así que el punto 1 era el segundo obstáculo y no el primero. Ese registro devuelve 0 por siete motivos distintos —formato, muestras, mips, array, bind flags, creación de la vista, agotamiento de huecos— sin decir cuál. **Siguiente paso: instrumentar esos siete retornos y reconstruir el addon**; desde el lado administrado no se puede acotar más.
+
+Mientras tanto la ruta se queda en el descriptor óptico, que es el comportamiento de siempre.
+
+### La profundidad se queda plana casi la mitad del tiempo
+
+En la sesión de las 17:12, de 29 sondas distintas **13 dan `profundidad 0..0 var 0` con `finito 100%`**: el búfer llega entero a cero, no con basura. Las seis primeras (frames 600 a 3600) son seguidas, y después alterna en bloques. Once de las trece coinciden con movimiento de cámara de 5 a 43 px y quedan marcadas `PLANA-EN-MOVIMIENTO`.
+
+Sin profundidad el pase neural no tiene con qué resolver las desoclusiones, que es justo lo que se ve mal al mover. La configuración de `generic_depth` ya la fija el instalador (`FilterFormat=5`, `DepthCopyBeforeClears=1`, `UseAspectRatioHeuristics=0`, `DrawStatsHeuristic=2`) y aun así la elección se mueve. Queda abierto, y con el rect ya conocido hay una hipótesis que antes no se podía formular: los candidatos de 3840×2160 conviven con una cámara que solo escribe 1933 filas, y `Underground View` aporta otro destino del mismo tamaño.
+
+### Lo que sí está sano
+
+`backend=0x00000000` en las 91 entradas. 18 resets solicitados y 18 completados. Media de 39,1 fps con máximo de 50,6, y el coste del feeder entre 15 y 17 ms de GPU. El usuario informa que el arrastre al mover la cámara ya no se aprecia con facilidad.
+
 ## Pendientes
 
-No se ha demostrado ausencia de ghosting, depth correcto de una ciudad, compatibilidad con todos los mods ni UI intacta. No se implementaron jitter de cámara, consumo de MV nativos ni DRS de Unity. La consulta de publicaciones no instala versiones nuevas sin un catálogo compatible y verificado.
+No se ha demostrado ausencia de ghosting, compatibilidad con todos los mods ni UI intacta. La profundidad de una ciudad **sí se midió, y no es correcta de forma sostenida**: ver la sección del 10 de septiembre. No se implementaron jitter de cámara ni DRS de Unity; el consumo de MV nativos está escrito, pero el puente rechaza la textura y la ruta no llega a ejercitarse. La consulta de publicaciones no instala versiones nuevas sin un catálogo compatible y verificado.
