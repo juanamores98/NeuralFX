@@ -39,24 +39,24 @@
   },
   {
     "Id": "renodx_dlss5",
-    "DisplayName": "RenoDX DLSS5 4.60",
-    "Description": "Generación 4.6: pestaña propia en ReShade con intensidad, tono global y local, estructura, máscara de personajes y corrección de UI. Requiere que el puente cierre la ruta del driver al rasgo 18; sin eso revienta en todo driver 616.64 o posterior.",
+    "DisplayName": "RenoDX DLSS5 4.70",
+    "Description": "Generación 4.7: pestaña propia, tono global aparte del local, en ReShade con intensidad, tono global y local, estructura, máscara de personajes y corrección de UI. Requiere que el puente cierre la ruta del driver al rasgo 18; sin eso revienta en todo driver 616.64 o posterior.",
     "Category": 1,
     "TargetRelativePath": "renodx-dlss5.addon64",
     "SourceType": "PublicDownload",
     "CanAutoDownload": true,
-    "DownloadUrl": "https://github.com/RankFTW/rhi-repo/releases/download/renodx-dlss5-4.60/renodx-dlss5_4.60.zip",
+    "DownloadUrl": "https://github.com/RankFTW/rhi-repo/releases/download/renodx-dlss5-4.70/renodx-dlss5_4.70.zip",
     "OfficialWebUrl": "https://github.com/RankFTW/rhi-repo/releases",
     "ReleaseRepository": "RankFTW/rhi-repo",
     "ReleaseTagPrefix": "renodx-dlss5-",
     "DownloadType": "ZipExtract",
-    "ExpectedSha256": "ad30994ba898f3eed5a4c7953927db9759c680a71bc9d9855cac93e9ccc1e3c6",
-    "Version": "renodx-dlss5-4.60",
+    "ExpectedSha256": "d6e356d01b429af6288f488a4926c44f1d779a7d4586ee8c79d04d3a09a536e6",
+    "Version": "renodx-dlss5-4.70",
     "PackageFiles": {
       "renodx-dlss5.addon64": "renodx-dlss5.addon64"
     },
     "ExpectedFileSha256": {
-      "renodx-dlss5.addon64": "245c06137ad13b1ca03afaad5100c1e8f0dce8c11fe50a9272ea562f33cea601"
+      "renodx-dlss5.addon64": "d5adf82eb44b065f4c590ac91fe824bab07afea0eb9f994bde936710c8593952"
     }
   },
   {

@@ -31,6 +31,7 @@ static void NeuralFxAbandonLocked(const NeuralFxFrameV3& frame) {
 static uint32_t nfx_taken_frame = 0, nfx_last_submitted = 0, nfx_camera = 0, nfx_epoch = 0;
 static uint64_t nfx_render_tick = 0, nfx_evaluate_tick = 0, nfx_heartbeat = 0;
 static bool nfx_enabled = false;
+static NeuralFxHealth nfx_health = { sizeof(NeuralFxHealth), 1 };
 // Diagnostico: por que se rechaza una entrada o una toma. Solo cuenta; no cambia el contrato.
 // 1 jitter, 2 apagado/latido, 3 epoca vieja, 4 frame no mas nuevo, 5 decode.
 static uint32_t nfx_reject[8] = {};
@@ -69,6 +70,19 @@ NFX_EXPORT int NFX_CALL NeuralFX_SetEnabled(uint32_t enabled) {
     std::lock_guard<std::mutex> lock(nfx_lock);
     nfx_enabled = enabled != 0; nfx_heartbeat = NeuralFxNow();
     if (!nfx_enabled) { NeuralFxAbandonLocked(nfx_render_frame); nfx_render_frame = {}; nfx_status.result = 0; }
+    return 1;
+}
+// Publicado por el feeder cuando termina una sonda o una ventana de medida.
+static void NeuralFxPublishHealth(const NeuralFxHealth& health) {
+    std::lock_guard<std::mutex> lock(nfx_lock);
+    NeuralFxHealth copy = health;
+    copy.size = sizeof(NeuralFxHealth); copy.version = 1;
+    nfx_health = copy;
+}
+NFX_EXPORT int NFX_CALL NeuralFX_GetHealth(NeuralFxHealth* output, uint32_t bytes) {
+    if (!output || bytes != sizeof(NeuralFxHealth)) return 0;
+    std::lock_guard<std::mutex> lock(nfx_lock);
+    *output = nfx_health;
     return 1;
 }
 NFX_EXPORT int NFX_CALL NeuralFX_GetCapabilities(void* output, uint32_t bytes) {

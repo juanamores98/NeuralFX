@@ -39,7 +39,23 @@ struct NeuralFxResult {
     int32_t adapter_high;
     uint32_t reserved;
 };
+// Salud del pipeline, solo lectura. Estructura aparte y con su propio export: el mod
+// que no la conozca no la pide, y el addon que no la tenga no exporta el simbolo. Asi
+// crece el contrato sin tocar lo que ya funciona. Las sondas y el coste los calcula el
+// feeder cada 600 frames; aqui solo se publican.
+struct NeuralFxHealth {
+    uint32_t size, version;
+    uint32_t probe_frame;        // frame en el que se tomaron las sondas; 0 = aun ninguna
+    float mv_mean_px, mv_max_px; // longitud media y maxima del vector de movimiento
+    uint32_t mv_nonzero_pct;
+    float depth_min, depth_max, depth_mean, depth_variance;
+    uint32_t depth_finite_pct;
+    uint32_t depth_flat_moving;  // 1 = profundidad plana con la escena en movimiento
+    float feed_cpu_ms, feed_gpu_ms, frame_interval_ms;
+    uint32_t stalls;
+};
 #pragma pack(pop)
+static_assert(sizeof(NeuralFxHealth) == 64);
 static_assert(sizeof(NeuralFxFrameV1) == 32);
 static_assert(sizeof(NeuralFxFrame) == 48);
 static_assert(sizeof(NeuralFxFrameV3) == 64);
@@ -52,9 +68,9 @@ static_assert(offsetof(NeuralFxResult, error) == 56);
 static_assert(sizeof(NeuralFxResult) == 80);
 static_assert(offsetof(NeuralFxFrame, motion_vectors_ptr) == 32);
 static constexpr uint32_t NFX_MAGIC = 0x4e465833;
-static constexpr uint32_t NFX_BUILD = 4;
+static constexpr uint32_t NFX_BUILD = 5;
 // No jitter/pre-UI/NR-confirmation capability until their acceptance gates pass.
-static constexpr uint32_t NFX_RESET = 1, NFX_CONTROL = 8, NFX_REGISTERED_MOTION = 16;
+static constexpr uint32_t NFX_RESET = 1, NFX_CONTROL = 8, NFX_REGISTERED_MOTION = 16, NFX_HEALTH = 32;
 static bool NeuralFxNewer(uint32_t a, uint32_t b) { return a != b && uint32_t(a - b) < 0x80000000u; }
 static bool NeuralFxFinite(float f) { return std::isfinite(f); }
 static bool NeuralFxDecode(const void* input, uint32_t bytes, NeuralFxFrameV3& out) {

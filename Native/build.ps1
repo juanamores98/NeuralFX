@@ -18,7 +18,7 @@ function Replace-Once([string]$Text, [string]$Before, [string]$After) {
     if (($Text.Split(@($Before), [StringSplitOptions]::None).Count - 1) -ne 1) { throw "Native patch marker missing or ambiguous: $Before" }
     return $Text.Replace($Before, $After)
 }
-$source = Replace-Once $source '#define FEED_VERSION "0.15.1"' ('#include "neuralfx_inputs.h"' + "`n" + '#define FEED_VERSION "0.15.1-neuralfx.5"')
+$source = Replace-Once $source '#define FEED_VERSION "0.15.1"' ('#include "neuralfx_inputs.h"' + "`n" + 'static NeuralFxHealth neuralfx_health = { sizeof(NeuralFxHealth), 1 };' + "`n" + '#define FEED_VERSION "0.15.1-neuralfx.6"')
 $source = Replace-Once $source '    CK("queue Signal(fence12)");' @'
     CK("queue Signal(fence12)");
     if (FAILED(neuralfx_signal) || FAILED(g.dev12->GetDeviceRemovedReason()))
@@ -146,6 +146,37 @@ $body = Replace-Once $body ('                    g.ctx4->Wait(g.fence11, v_out);
 $body = Replace-Once $body ('    SafeRelease(color);' + "`n" + '    SafeRelease(mv);') ('    NeuralFxFinishOutput(neuralfx_output, neuralfx_frame, neuralfx_committed);' + "`n" + '    SafeRelease(color);' + "`n" + '    SafeRelease(mv);')
 $source = $source.Substring(0, $start) + $body + $source.Substring($end)
 $source = Replace-Once $source '    if (!g_cfg.enabled || g.disabled || g_cfg.mode == 0) return;' '    if (!NeuralFxEnabled() || !g_cfg.enabled || g.disabled || g_cfg.mode == 0) return;'
+$source = Replace-Once $source '    Log("[feed] %s", g_mv_probe);' @'
+    Log("[feed] %s", g_mv_probe);
+    neuralfx_health.probe_frame    = static_cast<uint32_t>(g_guide_probe_capture_frame);
+    neuralfx_health.mv_mean_px     = static_cast<float>(sum / total);
+    neuralfx_health.mv_max_px      = static_cast<float>(maxlen);
+    neuralfx_health.mv_nonzero_pct = static_cast<uint32_t>(nonzero * 100 / total);
+    NeuralFxPublishHealth(neuralfx_health);
+'@
+$source = Replace-Once $source '    Log("[feed] %s", g_depth_probe);' @'
+    Log("[feed] %s", g_depth_probe);
+    neuralfx_health.probe_frame      = static_cast<uint32_t>(g_guide_probe_capture_frame);
+    neuralfx_health.depth_min        = static_cast<float>(finite > 0 ? min_depth : 0.0);
+    neuralfx_health.depth_max        = static_cast<float>(finite > 0 ? max_depth : 0.0);
+    neuralfx_health.depth_mean       = static_cast<float>(mean);
+    neuralfx_health.depth_variance   = static_cast<float>(variance);
+    neuralfx_health.depth_finite_pct = static_cast<uint32_t>(finite * 100 / total);
+    neuralfx_health.depth_flat_moving = flat_moving ? 1u : 0u;
+    NeuralFxPublishHealth(neuralfx_health);
+'@
+$source = Replace-Once $source '    if (++g.timed_frames < 600) return;' @'
+    if (g.timed_frames + 1 >= 600) {
+        const double neuralfx_span = 1000.0 * double(exit - g.span_start) / double(g.qpf);
+        const double neuralfx_n    = double(g.timed_frames + 1);
+        neuralfx_health.feed_cpu_ms       = static_cast<float>(1000.0 * double(g.cpu_ticks) / double(g.qpf) / neuralfx_n);
+        neuralfx_health.feed_gpu_ms       = g.ts_n > 0 ? static_cast<float>(g.ts_sum_ms / double(g.ts_n)) : 0.0f;
+        neuralfx_health.frame_interval_ms = static_cast<float>(neuralfx_span / neuralfx_n);
+        neuralfx_health.stalls            = static_cast<uint32_t>(g.win_stalls);
+        NeuralFxPublishHealth(neuralfx_health);
+    }
+    if (++g.timed_frames < 600) return;
+'@
 $source = Replace-Once $source 'static void DrawOverlay(reshade::api::effect_runtime *rt)' @'
 // Apply only the techniques owned by NeuralFX. Foreign techniques keep their state.
 static void NeuralFxBeginEffects(reshade::api::effect_runtime* rt, reshade::api::command_list*, reshade::api::resource_view, reshade::api::resource_view) {
@@ -274,9 +305,9 @@ Write-Output "Native artifact: $output/dlss5-feed.addon64"
 
 $buildManifest = [ordered]@{
     sourceCommit = (& git -C (Split-Path -Parent $nativeRoot) rev-parse HEAD)
-    bridgeBuild = 4; frameAbi = 3; frameBytes = 64; resultBytes = 80; ipc = 4
+    bridgeBuild = 5; frameAbi = 3; frameBytes = 64; resultBytes = 80; healthBytes = 64; ipc = 4
     artifactSha256 = (Get-FileHash -LiteralPath (Join-Path $output 'dlss5-feed.addon64') -Algorithm SHA256).Hash.ToLowerInvariant()
-    supported = @('reset','session-control','registered-motion-experimental','work-resolution-control','cas-control','output-completion-query')
+    supported = @('reset','session-control','registered-motion-experimental','work-resolution-control','cas-control','output-completion-query','pipeline-health')
     unverified = @('unity-motion-sign-and-coverage','scene-depth-camera-match','pre-ui-composition','nr-per-frame-confirmation')
     unavailable = @('prepared-camera-jitter','unity-internal-sr','nr-only-same-frame-comparison','integrated-frame-generation')
 }

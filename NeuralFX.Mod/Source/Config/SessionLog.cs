@@ -27,7 +27,7 @@ namespace NeuralFX.Config
         }
 
         /// <summary>Escribe si toca. Devuelve true si acaba de escribir una entrada.</summary>
-        public static bool Tick(float now, TelemetryFrame frame, float fps, float frameMs, string controlMessage, string conflicts)
+        public static bool Tick(float now, TelemetryFrame frame, Rendering.NativeHealth health, float fps, float frameMs, string controlMessage, string conflicts)
         {
             if (!ModSettings.EnableSessionLog || _failures >= MaxFailures) return false;
             string summary = SessionViewState.Summary(frame);
@@ -59,6 +59,17 @@ namespace NeuralFX.Config
                     .Append(" reset=").Append(frame.ResetCount).Append('/').Append(frame.CameraCuts)
                     .Append(" evaluaciones=").Append(frame.Evaluations)
                     .Append(" backend=0x").Append(frame.BackendError.ToString("X8")).Append('\n');
+                if (health.Size != 0 && health.ProbeFrame != 0)
+                    line.Append("  sonda ").Append(health.ProbeFrame)
+                        .Append(": profundidad ").Append(health.DepthMin.ToString("0.####")).Append("..").Append(health.DepthMax.ToString("0.####"))
+                        .Append(" var ").Append(health.DepthVariance.ToString("0.#####"))
+                        .Append(" finito ").Append(health.DepthFinitePct).Append('%')
+                        .Append(health.DepthFlatMoving != 0 ? " PLANA-EN-MOVIMIENTO" : "")
+                        .Append(" · movimiento ").Append(health.MvMeanPx.ToString("0.##")).Append(" px max ").Append(health.MvMaxPx.ToString("0.##"))
+                        .Append(" en ").Append(health.MvNonZeroPct).Append('%')
+                        .Append(" · feed ").Append(health.FeedCpuMs.ToString("0.##")).Append(" ms CPU / ").Append(health.FeedGpuMs.ToString("0.##")).Append(" ms GPU")
+                        .Append(" · intervalo ").Append(health.FrameIntervalMs.ToString("0.#")).Append(" ms · stalls ").Append(health.Stalls)
+                        .Append('\n');
                 if (!string.IsNullOrEmpty(controlMessage)) line.Append("  ajuste: ").Append(controlMessage).Append('\n');
                 if (!string.IsNullOrEmpty(conflicts)) line.Append("  aviso: ").Append(conflicts).Append('\n');
                 File.AppendAllText(_path, line.ToString(), Encoding.UTF8);

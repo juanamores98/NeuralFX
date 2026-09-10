@@ -28,6 +28,8 @@ namespace NeuralFX
         private bool _commandIsControl;
         public string ControlMessage { get; private set; }
         public TelemetryFrame CurrentFrame { get; private set; }
+        /// <summary>Ultima salud publicada por el puente. Size=0 si este puente no la trae.</summary>
+        internal Rendering.NativeHealth Health { get; private set; }
         public string BridgeReason { get { return _bridge.Reason; } }
         public static void ToggleWindow() { if (_instance != null) _instance._panel.Toggle(); }
         public void Awake()
@@ -92,6 +94,7 @@ namespace NeuralFX
             _publishAt = now + 0.1f;
             _bridge.SetEnabled(ModSettings.PipelineEnabled && _camera != null);
             var status = _bridge.ReadStatus();
+            Health = _bridge.ReadHealth();
             var result = _bridge.ReadResult();
             RuntimeFlags flags = _moduleFlags;
             if (ModSettings.PipelineEnabled) flags |= RuntimeFlags.PipelineRequested;
@@ -129,7 +132,7 @@ namespace NeuralFX
                 CommandResult = _commandResult, CommandReason = _commandReason, ControlsRevision=controls.Revision, ControlsResult=controlResult, RequestedWork=controls.WorkPercent, RequestedSharpness=controls.Sharpness
             };
             if (_channel != null) _channel.Publish(CurrentFrame);
-            Config.SessionLog.Tick(now, CurrentFrame, _fps, _frameMs, ControlMessage,
+            Config.SessionLog.Tick(now, CurrentFrame, Health, _fps, _frameMs, ControlMessage,
                 _conflicts.Length == 0 ? null : "AA adicional: " + string.Join(", ", _conflicts));
             if (_panel.Visible) _panel.Update(CurrentFrame,
                 !string.IsNullOrEmpty(ModSettings.LastSaveError) ? "Guardado pendiente: " + ModSettings.LastSaveError :

@@ -19,7 +19,7 @@ namespace NeuralFX.UI
         private UIPanel _panel;
         private UIScrollablePanel _body;
         private UIPanel _dot;
-        private UILabel _summary, _sub, _controlMessage, _details, _resetInfo, _workLabel, _sharpLabel;
+        private UILabel _summary, _sub, _controlMessage, _details, _resetInfo, _workLabel, _sharpLabel, _health;
         private readonly UILabel[] _metricCaptions = new UILabel[3], _metricValues = new UILabel[3];
         private UIButton _toggle, _close, _reset, _detailToggle;
         private readonly UIButton[] _workButtons = new UIButton[3], _sharpButtons = new UIButton[3];
@@ -85,6 +85,7 @@ namespace NeuralFX.UI
             _reset.tooltip = "El reset solo se confirma al completar una salida GPU de la historia correspondiente.";
             _reset.eventClicked += (c, e) => { if (NeuralFXManager.Instance != null) NeuralFXManager.Instance.RequestHistoryReset(); };
             _resetInfo = Label(.68f, DimColor);
+            _health = Label(.68f, DimColor);
             _controlMessage = Label(.7f, WarnColor);
 
             _detailToggle = Button(_body, "Ver detalle técnico", 0, 0, 300);
@@ -139,6 +140,7 @@ namespace NeuralFX.UI
             PlaceSegments(_sharpButtons, width, ref y);
             _reset.width = width; _reset.relativePosition = new Vector3(0, y); y += 34;
             Place(_resetInfo, 0, width, ref y);
+            Place(_health, 0, width, ref y);
             Place(_controlMessage, 0, width, ref y);
             _detailToggle.width = width; _detailToggle.relativePosition = new Vector3(0, y); y += 36;
             _details.isVisible = _showDetails;
@@ -204,11 +206,29 @@ namespace NeuralFX.UI
             Set(_resetInfo, frame.ResetCount + " confirmados de " + frame.CameraCuts + command);
 
             var manager = NeuralFXManager.Instance;
+            Set(_health, manager != null ? DescribeHealth(manager.Health) : "");
+            if (_health != null) _health.textColor = manager != null && manager.Health.DepthFlatMoving != 0 ? WarnColor : DimColor;
             string message = manager != null ? manager.ControlMessage : null;
             Set(_controlMessage, string.IsNullOrEmpty(message) ? notice ?? "" : message);
             _detailToggle.text = _showDetails ? "Ocultar detalle técnico" : "Ver detalle técnico";
             if (_showDetails) Set(_details, SessionViewState.Details(frame));
             Fit();
+        }
+        // Lo que costo tres sesiones de diagnostico averiguar, dicho donde se ve.
+        private static string DescribeHealth(Rendering.NativeHealth health)
+        {
+            if (health.Size == 0) return "Este puente no publica salud del pipeline.";
+            if (health.ProbeFrame == 0) return "Sondas: aun sin medir (la primera llega a los 600 frames).";
+            if (health.DepthFlatMoving != 0)
+                return "Profundidad PLANA con la escena en movimiento: ReShade esta en el buffer equivocado (Add-ons -> Generic Depth).";
+            string depth = health.DepthFinitePct == 0 || health.DepthMax - health.DepthMin < 1e-6f
+                ? "profundidad plana"
+                : "profundidad " + health.DepthMin.ToString("0.###") + "-" + health.DepthMax.ToString("0.###");
+            string motion = health.MvNonZeroPct < 2
+                ? "sin movimiento (normal con la camara quieta)"
+                : "movimiento " + health.MvMeanPx.ToString("0.0") + " px en el " + health.MvNonZeroPct + "%";
+            string cost = health.FeedGpuMs > 0 ? " · coste " + health.FeedGpuMs.ToString("0.0") + " ms de GPU" : "";
+            return depth + " · " + motion + cost;
         }
         private static Color32 DotColor(TelemetryFrame frame)
         {
