@@ -8,7 +8,6 @@ if (Path.GetFileName(target.TrimEnd('\\')) != "NeuralFX") throw new ArgumentExce
 string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 string modRelative = Path.GetRelativePath(local, target);
 ManagedPaths.Resolve(local, modRelative);
-string hubRelative = "NeuralFX/Hub";
 static void RequireClosed()
 {
     if (HardwareDiagnosticsService.IsCitiesSkylinesRunning()) throw new IOException("Close Cities: Skylines before updating its mod.");
@@ -18,12 +17,12 @@ static void RequireClosed()
 }
 RequireClosed();
 var files = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(Path.Combine(source, "deployment-manifest.json"))) ?? throw new InvalidDataException("Missing package manifest.");
-if (!files.ContainsKey("NeuralFX.dll") || !files.ContainsKey("Hub/NeuralFX.Hub.exe")) throw new InvalidDataException("Incomplete mod package.");
+if (!files.ContainsKey("NeuralFX.dll") || !files.ContainsKey("App/NeuralFX.Hub.exe")) throw new InvalidDataException("Incomplete mod package.");
 var payload = new Dictionary<string, byte[]>();
 foreach (var file in files)
 {
     string path = ManagedPaths.Resolve(source, file.Key);
-    ManagedPaths.Resolve(local, file.Key.StartsWith("Hub/", StringComparison.Ordinal) ? hubRelative + file.Key.Substring(3) : modRelative + "/" + file.Key);
+    ManagedPaths.Resolve(local, modRelative + "/" + file.Key);
     if (DependencyManagerService.CalculateSha256(path) != file.Value) throw new InvalidDataException("Package hash mismatch: " + file.Key);
     payload.Add(file.Key, File.ReadAllBytes(path));
 }
@@ -38,17 +37,16 @@ string backup = "NeuralFX/Backups/Packages/" + DateTime.UtcNow.ToString("yyyyMMd
 // Install-NeuralFX.ps1 se niega a ejecutarse desde la carpeta Mods.
 static bool BelongsInModDirectory(string key) =>
     key is "NeuralFX.dll" or "LICENSE" or "NOTICE" or "deployment-manifest.json";
-// El lanzador vive junto al Hub, que es lo que abre. Dentro de Mods no le sirve a nadie.
+// El lanzador acompana al ejecutable, que ahora vive en la carpeta del mod.
 static bool BelongsBesideHub(string key) => key is "Iniciar-NeuralFX-Hub.bat";
 
 foreach (var file in payload)
 {
-    bool hub = file.Key.StartsWith("Hub/", StringComparison.Ordinal);
-    bool besideHub = !hub && BelongsBesideHub(file.Key);
-    if (!hub && !besideHub && !BelongsInModDirectory(file.Key)) continue;
-    string relative = hub ? hubRelative + file.Key.Substring(3)
-        : besideHub ? hubRelative + "/" + file.Key
-        : modRelative + "/" + file.Key;
+    // Hub/ es el instalador auxiliar: se usa desde el paquete extraido y no se instala.
+    if (file.Key.StartsWith("Hub/", StringComparison.Ordinal)) continue;
+    bool app = file.Key.StartsWith("App/", StringComparison.Ordinal);
+    if (!app && !BelongsBesideHub(file.Key) && !BelongsInModDirectory(file.Key)) continue;
+    string relative = modRelative + "/" + file.Key;
     string path = ManagedPaths.Resolve(local, relative);
     if (File.Exists(path)) transaction.Write(backup + "/" + file.Key, File.ReadAllBytes(path));
     transaction.Write(relative, file.Value);
@@ -58,6 +56,8 @@ foreach (var file in payload)
 var legacyDirectories = new[]
 {
     Path.Combine(target, "Hub"), Path.Combine(target, ".neuralfx-previous"),
+    // El Hub vivia aqui cuando aun tenia DLL sueltas. Ahora es un unico .exe y va con el mod.
+    Path.Combine(local, "NeuralFX", "Hub"),
     // Paquetes anteriores copiaban aquí el ZIP entero. Se archivan y se retiran.
     Path.Combine(target, "docs"), Path.Combine(target, "licenses"),
 };
@@ -75,7 +75,9 @@ foreach (string directory in legacyDirectories.Where(Directory.Exists))
     {
         string relative = Path.GetRelativePath(local, path);
         ManagedPaths.Resolve(local, relative);
-        transaction.Write(backup + "/legacy/" + Path.GetRelativePath(target, path), File.ReadAllBytes(path));
+        // Relativo a LOCALAPPDATA, nunca a target: una carpeta heredada fuera del mod daria
+        // una ruta con ".." y la copia se escaparia del propio directorio de respaldo.
+        transaction.Write(backup + "/legacy/" + relative, File.ReadAllBytes(path));
         transaction.Write(relative, null);
     }
 RequireClosed();
@@ -87,5 +89,5 @@ foreach (string directory in legacyDirectories.Where(Directory.Exists))
         if (!Directory.EnumerateFileSystemEntries(path).Any()) Directory.Delete(path);
     }
 Console.WriteLine("Package installed: " + target);
-Console.WriteLine("Hub installed outside the mod scanner: " + Path.Combine(local, hubRelative));
+Console.WriteLine("Hub installed with the mod: " + Path.Combine(target, "App"));
 Console.WriteLine("Previous files retained: " + Path.Combine(local, backup));

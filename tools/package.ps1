@@ -13,7 +13,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
     $package = Join-Path $taskRoot ('artifacts/releases/NeuralFX-2.1.0-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
     New-Item -ItemType Directory -Path $package -Force | Out-Null
-    & dotnet publish NeuralFX.Hub/NeuralFX.Hub.csproj -c Release -r win-x64 --self-contained false @managedArgs -o (Join-Path $package 'Hub') --nologo -v:q
+    # Un unico ejecutable, sin DLL sueltas: asi puede vivir dentro de Addons/Mods, que es
+    # donde el usuario espera encontrarlo. CS1 escanea *.dll de esa carpeta recursivamente y
+    # trata de cargarlas como ensamblados del juego; sin ninguna, no hay nada que cargar.
+    & dotnet publish NeuralFX.Hub/NeuralFX.Hub.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:DebugType=none @managedArgs -o (Join-Path $package 'App') --nologo -v:q
     if ($LASTEXITCODE -ne 0) { throw 'Hub publish failed.' }
     & dotnet publish tools/NeuralFX.PackageInstall/NeuralFX.PackageInstall.csproj -c Release -r win-x64 --self-contained false @managedArgs -o (Join-Path $package 'Hub') --nologo -v:q
     if ($LASTEXITCODE -ne 0) { throw 'Package installer publish failed.' }

@@ -13,9 +13,13 @@ namespace NeuralFX.UI
         {
             get
             {
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "NeuralFX/Hub/NeuralFX.Hub.exe");
+                string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                // Junto al mod es donde vive ahora: un único .exe sin DLL sueltas, así que el
+                // escáner de CS1 no tiene nada que cargar ahí. La ruta anterior queda como
+                // respaldo para una instalación que aún no se haya actualizado.
+                string beside = Path.Combine(local, "Colossal Order/Cities_Skylines/Addons/Mods/NeuralFX/App/NeuralFX.Hub.exe");
+                if (File.Exists(beside)) return beside;
+                return Path.Combine(local, "NeuralFX/Hub/NeuralFX.Hub.exe");
             }
         }
 
