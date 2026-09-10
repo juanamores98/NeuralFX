@@ -186,8 +186,8 @@ namespace NeuralFX.Hub
             var guidance = InstallationGuidance.Create(true, _hardwareInfo.CanWriteGameDir, _hardwareInfo.IsGameRunning, _report, _dependencies);
             // Lo mismo, pero suponiendo el juego ya cerrado: es lo que podremos hacer después de cerrarlo.
             var afterClosing = InstallationGuidance.Create(true, _hardwareInfo.CanWriteGameDir, false, _report, _dependencies);
-            bool canCloseGame = _channel != null && _pid != 0;
-            bool installable = guidance.CanInstall || (_hardwareInfo.IsGameRunning && canCloseGame && afterClosing.CanInstall);
+            bool canCloseGame = _hardwareInfo.IsGameRunning;
+            bool installable = guidance.CanInstall || (canCloseGame && afterClosing.CanInstall);
             bool hasArtifacts = PipelineFootprint.HasArtifacts(root) || Directory.Exists(Path.Combine(root, ".neuralfx-transaction"));
             bool isVerified = _report is { Managed: true, Valid: true, NeedsRepair: false };
             bool isLegacyOrIncomplete = _report != null && (_report.NeedsRepair || _report.CanMigrate || (hasArtifacts && !isVerified));
@@ -225,17 +225,17 @@ namespace NeuralFX.Hub
 
             bool connected = _channel != null && _pid != 0;
             BtnGameProcess.Content = _hardwareInfo.IsGameRunning ? "Cerrar el juego" : "Abrir Cities: Skylines";
-            BtnGameProcess.IsEnabled = !_busy && (!_hardwareInfo.IsGameRunning || connected);
+            BtnGameProcess.IsEnabled = !_busy;
             BtnGameProcess.ToolTip = _hardwareInfo.IsGameRunning
                 ? connected
-                    ? "Pide al mod que cierre el juego por la salida normal. Guarda antes: no se guarda la ciudad por ti."
-                    : "El juego está abierto pero el mod no publica telemetría; ciérralo desde el propio juego."
+                    ? "El mod cierra el juego por su salida normal. Guarda antes: no se guarda la ciudad por ti."
+                    : "Sin telemetría se pide el cierre a la ventana del juego, como al pulsar la X. Guarda antes."
                 : "Lanza Cities: Skylines por Steam.";
 
-            if (_hardwareInfo.IsGameRunning && canCloseGame && afterClosing.CanInstall)
+            if (canCloseGame && afterClosing.CanInstall)
                 BtnInstall.Content = "Cerrar el juego y " + guidance.InstallLabel.Substring(0, 1).ToLowerInvariant() + guidance.InstallLabel.Substring(1);
 
-            TxtInstallHint.Text = _hardwareInfo.IsGameRunning && canCloseGame && afterClosing.CanInstall
+            TxtInstallHint.Text = canCloseGame && afterClosing.CanInstall
                 ? "Se cerrará Cities: Skylines, se escribirán los archivos y se volverá a abrir. Guarda la ciudad antes."
                 : _hardwareInfo.IsGameRunning
                 ? "Cierra Cities: Skylines para poder escribir en su carpeta."
@@ -337,10 +337,33 @@ namespace NeuralFX.Hub
         // Abrir y cerrar CS1 desde el Hub. El cierre viaja por el mismo canal de comandos que el
         // resto: el mod ejecuta la salida normal del juego. Nunca se termina el proceso a la fuerza,
         // porque eso sí perdería la ciudad sin remedio.
-        private async Task<bool> WaitForGameExitAsync()
+        /// <summary>
+        /// Pide el cierre y espera. Primero al mod, que ejecuta la salida propia del juego;
+        /// si no hay telemetría —el mod solo publica dentro de una ciudad— se le pide a la
+        /// ventana, igual que al pulsar la X. Nunca se termina el proceso a la fuerza.
+        /// </summary>
+        private async Task<bool> CloseGameAsync()
+        {
+            if (_channel != null && _pid != 0)
+            {
+                SendTelemetryCommand(CommandKind.QuitGame.ToString());
+                if (await WaitForGameExitAsync(20)) return true;
+            }
+            int pid = await Task.Run(() => FindGameProcess(_hardwareInfo.GameExePath));
+            if (pid == 0) return true;
+            try
+            {
+                using var game = Process.GetProcessById(pid);
+                if (!game.CloseMainWindow()) LogHub("El juego no aceptó la petición de cierre de su ventana.");
+            }
+            catch (Exception ex) { LogHub("Cerrar el juego: " + ex.Message); }
+            return await WaitForGameExitAsync(60);
+        }
+
+        private async Task<bool> WaitForGameExitAsync(int seconds = 60)
         {
             string path = _hardwareInfo.GameExePath;
-            for (int attempt = 0; attempt < 120 && !_closed; attempt++)
+            for (int attempt = 0; attempt < seconds * 2 && !_closed; attempt++)
             {
                 if (await Task.Run(() => FindGameProcess(path)) == 0)
                 {
@@ -364,21 +387,16 @@ namespace NeuralFX.Hub
             catch (Exception ex) { LogHub("Lanzar el juego: " + ex.Message); return false; }
         }
 
-        private void BtnGameProcess_Click(object sender, RoutedEventArgs e)
+        private async void BtnGameProcess_Click(object sender, RoutedEventArgs e)
         {
             if (_hardwareInfo.IsGameRunning)
             {
-                if (_channel == null || _pid == 0)
-                {
-                    SetNotice("No se puede cerrar el juego desde aquí",
-                        "El proceso está abierto pero el mod no publica telemetría. Ciérralo desde el propio juego.", false);
-                    return;
-                }
                 if (MessageBox.Show(this,
-                        "Se pedirá al juego que se cierre por su salida normal.\n\nGuarda la ciudad antes: NeuralFX no la guarda por ti.",
+                        "Se pedirá a Cities: Skylines que se cierre por su salida normal.\n\nGuarda la ciudad antes: NeuralFX no la guarda por ti.",
                         "Cerrar Cities: Skylines", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
-                SendTelemetryCommand(CommandKind.QuitGame.ToString());
-                SetNotice("Cierre solicitado", "Esperando a que Cities: Skylines termine de cerrarse.");
+                await PerformAsync("Cerrando Cities: Skylines", async () => await CloseGameAsync()
+                    ? new(true, "Juego cerrado", "Cities: Skylines ya no está en ejecución.")
+                    : new(false, "El juego sigue abierto", "No respondió a la petición de cierre. Ciérralo a mano."));
                 return;
             }
 
@@ -473,18 +491,11 @@ namespace NeuralFX.Hub
             bool restart = false;
             if (_hardwareInfo.IsGameRunning)
             {
-                if (_channel == null || _pid == 0)
-                {
-                    SetNotice("Cierra Cities: Skylines primero",
-                        "El proceso está abierto pero el mod no publica telemetría, así que el Hub no puede pedirle que se cierre.", false);
-                    return;
-                }
                 if (MessageBox.Show(this,
                         "Se cerrará Cities: Skylines para escribir los archivos y se volverá a abrir al terminar.\n\nGuarda la ciudad antes: NeuralFX no la guarda por ti.",
                         "Cerrar, instalar y volver a abrir", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
                 SetNotice("Cerrando Cities: Skylines", "Esperando a que el juego termine de cerrarse antes de escribir nada.");
-                SendTelemetryCommand(CommandKind.QuitGame.ToString());
-                if (!await WaitForGameExitAsync())
+                if (!await CloseGameAsync())
                 {
                     SetNotice("El juego sigue abierto",
                         "No se escribió nada. Ciérralo a mano y vuelve a intentarlo.", false);
