@@ -496,7 +496,7 @@
                             </DockPanel>
                             <TextBox Grid.Row="1" x:Name="TxtLogConsole" IsReadOnly="True" FontFamily="Consolas" FontSize="12"
                                      TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="#161618"
-                                     Foreground="#C8C8CC" BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="10" />
+                                     Foreground="#D8D8DC" BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="10" />
                         </Grid>
                     </Expander>
                 </Grid>

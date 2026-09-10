@@ -9,7 +9,8 @@ namespace NeuralFX.UI
     {
         private const float PanelWidth = 352f, TitleHeight = 42f, Gap = 10f;
         private static readonly Color32 TextColor = new Color32(220, 228, 234, 255);
-        private static readonly Color32 DimColor = new Color32(147, 162, 174, 255);
+        // 4,5:1 sobre el panel Colossal; el gris anterior (147,162,174) se quedaba corto.
+        private static readonly Color32 DimColor = new Color32(170, 184, 196, 255);
         private static readonly Color32 AccentColor = new Color32(127, 216, 192, 255);
         private static readonly Color32 WarnColor = new Color32(224, 180, 140, 255);
         private static readonly int[] WorkSteps = { 100, 85, 66 };
@@ -194,7 +195,8 @@ namespace NeuralFX.UI
             _toggle.text = Config.ModSettings.PipelineEnabled ? "Desactivar NeuralFX" : "Activar NeuralFX";
             Highlight(_workButtons, NearestWork(frame.RequestedWork));
             Highlight(_sharpButtons, NearestSharp(frame.RequestedSharpness));
-            Set(_resetInfo, frame.ResetCount + " confirmados de " + frame.CameraCuts + " · comando " + SessionViewState.CommandStatus(frame).ToLower());
+            string command = frame.LastCommand != 0 ? " · " + SessionViewState.CommandStatus(frame).ToLower() : "";
+            Set(_resetInfo, frame.ResetCount + " confirmados de " + frame.CameraCuts + command);
 
             var manager = NeuralFXManager.Instance;
             string message = manager != null ? manager.ControlMessage : null;

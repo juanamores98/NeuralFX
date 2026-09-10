@@ -31,6 +31,10 @@ static void NeuralFxAbandonLocked(const NeuralFxFrameV3& frame) {
 static uint32_t nfx_taken_frame = 0, nfx_last_submitted = 0, nfx_camera = 0, nfx_epoch = 0;
 static uint64_t nfx_render_tick = 0, nfx_evaluate_tick = 0, nfx_heartbeat = 0;
 static bool nfx_enabled = false;
+// Diagnostico: por que se rechaza una entrada o una toma. Solo cuenta; no cambia el contrato.
+// 1 jitter, 2 apagado/latido, 3 epoca vieja, 4 frame no mas nuevo, 5 decode.
+static uint32_t nfx_reject[8] = {};
+static uint32_t nfx_gate_misses = 0;
 static NeuralFxControls nfx_controls = {24,3,0,0,100,0.3f};
 static uint32_t nfx_controls_applied = 0;
 static int32_t nfx_controls_result = 0;
@@ -74,13 +78,13 @@ NFX_EXPORT int NFX_CALL NeuralFX_GetCapabilities(void* output, uint32_t bytes) {
 }
 NFX_EXPORT int NFX_CALL NeuralFX_SubmitFrameV3(const void* input, uint32_t bytes) {
     NeuralFxFrameV3 frame = {};
-    if (!NeuralFxDecode(input, bytes, frame)) return 0;
+    if (!NeuralFxDecode(input, bytes, frame)) { ++nfx_reject[5]; return 0; }
     // This consumer has no prepare/fallback contract for camera jitter. Fail closed.
-    if (frame.jitter_x != 0 || frame.jitter_y != 0) return 0;
+    if (frame.jitter_x != 0 || frame.jitter_y != 0) { ++nfx_reject[1]; return 0; }
     std::lock_guard<std::mutex> lock(nfx_lock);
-    if (!nfx_enabled || NeuralFxNow() - nfx_heartbeat >= 3000) return 0;
+    if (!nfx_enabled || NeuralFxNow() - nfx_heartbeat >= 3000) { ++nfx_reject[2]; return 0; }
     if (frame.camera && (frame.camera != nfx_camera || frame.epoch != nfx_epoch)) {
-        if (nfx_epoch && !NeuralFxNewer(frame.epoch, nfx_epoch)) return 0;
+        if (nfx_epoch && !NeuralFxNewer(frame.epoch, nfx_epoch)) { ++nfx_reject[3]; return 0; }
         nfx_camera = frame.camera; nfx_epoch = frame.epoch;
         nfx_last_submitted = nfx_taken_frame = 0; NeuralFxAbandonLocked(nfx_render_frame); nfx_render_frame = {};
         // Keep submitted slots until their queued render event executes.
@@ -88,7 +92,7 @@ NFX_EXPORT int NFX_CALL NeuralFX_SubmitFrameV3(const void* input, uint32_t bytes
         nfx_result.camera = frame.camera; nfx_result.epoch = frame.epoch; nfx_result.error = nfx_last_error;
         nfx_status.result = 0; nfx_status.reset_serial = frame.reset_serial - 1;
     }
-    if (nfx_last_submitted && !NeuralFxNewer(frame.frame, nfx_last_submitted)) return 0;
+    if (nfx_last_submitted && !NeuralFxNewer(frame.frame, nfx_last_submitted)) { ++nfx_reject[4]; return 0; }
     nfx_last_submitted = frame.frame;
     nfx_slots[frame.frame % 16] = frame;
     return 1;
@@ -131,6 +135,27 @@ static bool NeuralFxTakeFrame(uint32_t width, uint32_t height, NeuralFxFrameV3& 
     if (valid) { nfx_taken_frame = frame.frame; nfx_render_frame = {}; }
     return valid;
 }
+// Lo que el puente sabe cuando la toma falla. El add-on lo registra con ritmo limitado:
+// sin esto, un rechazo en la puerta es completamente silencioso.
+struct NeuralFxGateReport {
+    bool enabled; uint32_t frame, taken, width, height, age_ms, misses;
+    uint32_t jitter, heartbeat, epoch, stale, decode;
+};
+static NeuralFxGateReport NeuralFxGate(bool count_miss) {
+    std::lock_guard<std::mutex> lock(nfx_lock);
+    if (count_miss) ++nfx_gate_misses;
+    NeuralFxGateReport report = {};
+    report.enabled = nfx_enabled;
+    report.frame = nfx_render_frame.frame; report.taken = nfx_taken_frame;
+    report.width = nfx_render_frame.width; report.height = nfx_render_frame.height;
+    uint64_t now = NeuralFxNow();
+    report.age_ms = static_cast<uint32_t>(now >= nfx_render_tick ? now - nfx_render_tick : 0);
+    report.misses = nfx_gate_misses;
+    report.jitter = nfx_reject[1]; report.heartbeat = nfx_reject[2];
+    report.epoch = nfx_reject[3]; report.stale = nfx_reject[4]; report.decode = nfx_reject[5];
+    return report;
+}
+static void NeuralFxGateLogged() { std::lock_guard<std::mutex> lock(nfx_lock); nfx_gate_misses = 0; }
 static bool NeuralFxResetNeeded(const NeuralFxFrameV3& frame) {
     std::lock_guard<std::mutex> lock(nfx_lock); return frame.reset_serial != nfx_status.reset_serial;
 }

@@ -38,11 +38,31 @@ $nativeMvInjection = @'
     NeuralFxFrameV3 neuralfx_frame = {};
     const bool neuralfx_valid = NeuralFxTakeFrame(cd.Width, cd.Height, neuralfx_frame);
     if (!neuralfx_valid) {
+        // Un rechazo aqui era invisible: el pipeline se quedaba callado para siempre.
+        static uint64_t neuralfx_gate_at = 0;
+        const NeuralFxGateReport neuralfx_gate = NeuralFxGate(true);
+        const uint64_t neuralfx_gate_now = NeuralFxNow();
+        if (neuralfx_gate_now - neuralfx_gate_at > 5000) {
+            neuralfx_gate_at = neuralfx_gate_now;
+            Log("[neuralfx] sin entrada del mod en %u presents: enabled=%d mod=%ux%u escena=%ux%u frame=%u tomado=%u edad=%u ms | rechazos jitter=%u latido=%u epoca=%u no-nuevo=%u decode=%u",
+                neuralfx_gate.misses, neuralfx_gate.enabled ? 1 : 0,
+                neuralfx_gate.width, neuralfx_gate.height, cd.Width, cd.Height,
+                neuralfx_gate.frame, neuralfx_gate.taken, neuralfx_gate.age_ms,
+                neuralfx_gate.jitter, neuralfx_gate.heartbeat, neuralfx_gate.epoch,
+                neuralfx_gate.stale, neuralfx_gate.decode);
+            NeuralFxGateLogged();
+        }
         SafeRelease(color); SafeRelease(mv); SafeRelease(depth); SafeRelease(mask);
         return; // never evaluate a stale frame or an auxiliary Present
     }
     NeuralFxPendingOutput* neuralfx_output = NeuralFxPrepareOutput(ctx);
     if (!neuralfx_output) {
+        static uint64_t neuralfx_queue_at = 0;
+        const uint64_t neuralfx_queue_now = NeuralFxNow();
+        if (neuralfx_queue_now - neuralfx_queue_at > 5000) {
+            neuralfx_queue_at = neuralfx_queue_now;
+            Log("[neuralfx] cola de salidas saturada: ninguna consulta de las 8 ha terminado; se conserva la escena actual");
+        }
         { std::lock_guard<std::mutex> lock(nfx_lock); NeuralFxAbandonLocked(neuralfx_frame); }
         SafeRelease(color); SafeRelease(mv); SafeRelease(depth); SafeRelease(mask);
         return; // bounded queue: leave the current scene untouched

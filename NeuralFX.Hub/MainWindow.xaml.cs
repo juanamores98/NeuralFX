@@ -184,6 +184,10 @@ namespace NeuralFX.Hub
             }
 
             var guidance = InstallationGuidance.Create(true, _hardwareInfo.CanWriteGameDir, _hardwareInfo.IsGameRunning, _report, _dependencies);
+            // Lo mismo, pero suponiendo el juego ya cerrado: es lo que podremos hacer después de cerrarlo.
+            var afterClosing = InstallationGuidance.Create(true, _hardwareInfo.CanWriteGameDir, false, _report, _dependencies);
+            bool canCloseGame = _channel != null && _pid != 0;
+            bool installable = guidance.CanInstall || (_hardwareInfo.IsGameRunning && canCloseGame && afterClosing.CanInstall);
             bool hasArtifacts = PipelineFootprint.HasArtifacts(root) || Directory.Exists(Path.Combine(root, ".neuralfx-transaction"));
             bool isVerified = _report is { Managed: true, Valid: true, NeedsRepair: false };
             bool isLegacyOrIncomplete = _report != null && (_report.NeedsRepair || _report.CanMigrate || (hasArtifacts && !isVerified));
@@ -195,7 +199,7 @@ namespace NeuralFX.Hub
                 TxtPipelineStatusTitle.Text = "Archivos instalados y verificados";
                 TxtPipelineStatusSubtitle.Text = "Los 19 archivos coinciden con el registro. Que el portador y NR se ejecuten se comprueba por separado al cargar una ciudad.";
                 BtnInstall.Content = guidance.InstallLabel;
-                BtnInstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && guidance.CanInstall;
+                BtnInstall.IsEnabled = !_busy && installable;
                 BtnUninstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && _hardwareInfo.CanWriteGameDir;
             }
             else if (isLegacyOrIncomplete)
@@ -205,7 +209,7 @@ namespace NeuralFX.Hub
                 TxtPipelineStatusTitle.Text = "Instalación incompleta o antigua";
                 TxtPipelineStatusSubtitle.Text = "Hay archivos en el juego que no coinciden con el catálogo actual. Actualizarlos conserva una copia verificada del estado previo.";
                 BtnInstall.Content = guidance.InstallLabel;
-                BtnInstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && guidance.CanInstall;
+                BtnInstall.IsEnabled = !_busy && installable;
                 BtnUninstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && _hardwareInfo.CanWriteGameDir;
             }
             else
@@ -215,7 +219,7 @@ namespace NeuralFX.Hub
                 TxtPipelineStatusTitle.Text = "Sin instalación de NeuralFX";
                 TxtPipelineStatusSubtitle.Text = "No hay archivos gestionados en la carpeta del juego. Antes de escribir nada verás la lista completa de cambios.";
                 BtnInstall.Content = guidance.InstallLabel;
-                BtnInstall.IsEnabled = !_busy && !_hardwareInfo.IsGameRunning && guidance.CanInstall;
+                BtnInstall.IsEnabled = !_busy && installable;
                 BtnUninstall.IsEnabled = false;
             }
 
@@ -225,10 +229,15 @@ namespace NeuralFX.Hub
             BtnGameProcess.ToolTip = _hardwareInfo.IsGameRunning
                 ? connected
                     ? "Pide al mod que cierre el juego por la salida normal. Guarda antes: no se guarda la ciudad por ti."
-                    : "El juego est\u00e1 abierto pero el mod no publica telemetr\u00eda; ci\u00e9rralo desde el propio juego."
+                    : "El juego está abierto pero el mod no publica telemetría; ciérralo desde el propio juego."
                 : "Lanza Cities: Skylines por Steam.";
 
-            TxtInstallHint.Text = _hardwareInfo.IsGameRunning
+            if (_hardwareInfo.IsGameRunning && canCloseGame && afterClosing.CanInstall)
+                BtnInstall.Content = "Cerrar el juego y " + guidance.InstallLabel.Substring(0, 1).ToLowerInvariant() + guidance.InstallLabel.Substring(1);
+
+            TxtInstallHint.Text = _hardwareInfo.IsGameRunning && canCloseGame && afterClosing.CanInstall
+                ? "Se cerrará Cities: Skylines, se escribirán los archivos y se volverá a abrir. Guarda la ciudad antes."
+                : _hardwareInfo.IsGameRunning
                 ? "Cierra Cities: Skylines para poder escribir en su carpeta."
                 : !_hardwareInfo.CanWriteGameDir ? "Sin permiso de escritura en la carpeta del juego."
                 : !guidance.CanInstall ? guidance.Next
@@ -327,35 +336,54 @@ namespace NeuralFX.Hub
 
         // Abrir y cerrar CS1 desde el Hub. El cierre viaja por el mismo canal de comandos que el
         // resto: el mod ejecuta la salida normal del juego. Nunca se termina el proceso a la fuerza,
-        // porque eso s\u00ed perder\u00eda la ciudad sin remedio.
+        // porque eso sí perdería la ciudad sin remedio.
+        private async Task<bool> WaitForGameExitAsync()
+        {
+            string path = _hardwareInfo.GameExePath;
+            for (int attempt = 0; attempt < 120 && !_closed; attempt++)
+            {
+                if (await Task.Run(() => FindGameProcess(path)) == 0)
+                {
+                    _hardwareInfo.IsGameRunning = false; _pid = 0;
+                    _channel?.Dispose(); _channel = null; _lastFrame = default;
+                    await Task.Delay(1500);   // deja que el proceso suelte los archivos del juego
+                    return true;
+                }
+                await Task.Delay(500);
+            }
+            return false;
+        }
+
+        private bool LaunchGame()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("steam://rungameid/255710") { UseShellExecute = true });
+                return true;
+            }
+            catch (Exception ex) { LogHub("Lanzar el juego: " + ex.Message); return false; }
+        }
+
         private void BtnGameProcess_Click(object sender, RoutedEventArgs e)
         {
             if (_hardwareInfo.IsGameRunning)
             {
                 if (_channel == null || _pid == 0)
                 {
-                    SetNotice("No se puede cerrar el juego desde aqu\u00ed",
-                        "El proceso est\u00e1 abierto pero el mod no publica telemetr\u00eda. Ci\u00e9rralo desde el propio juego.", false);
+                    SetNotice("No se puede cerrar el juego desde aquí",
+                        "El proceso está abierto pero el mod no publica telemetría. Ciérralo desde el propio juego.", false);
                     return;
                 }
                 if (MessageBox.Show(this,
-                        "Se pedir\u00e1 al juego que se cierre por su salida normal.\n\nGuarda la ciudad antes: NeuralFX no la guarda por ti.",
+                        "Se pedirá al juego que se cierre por su salida normal.\n\nGuarda la ciudad antes: NeuralFX no la guarda por ti.",
                         "Cerrar Cities: Skylines", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
                 SendTelemetryCommand(CommandKind.QuitGame.ToString());
                 SetNotice("Cierre solicitado", "Esperando a que Cities: Skylines termine de cerrarse.");
                 return;
             }
 
-            try
-            {
-                Process.Start(new ProcessStartInfo("steam://rungameid/255710") { UseShellExecute = true });
-                SetNotice("Abriendo Cities: Skylines", "Lanzado a trav\u00e9s de Steam. El Hub seguir\u00e1 el proceso cuando arranque.");
-            }
-            catch (Exception ex)
-            {
-                LogHub("Lanzar el juego: " + ex.Message);
-                SetNotice("No se pudo lanzar el juego", ex.Message + " \u00c1brelo desde Steam.", false);
-            }
+            if (LaunchGame()) SetNotice("Abriendo Cities: Skylines", "Lanzado a través de Steam. El Hub seguirá el proceso cuando arranque.");
+            else SetNotice("No se pudo lanzar el juego", "Ábrelo desde Steam. El detalle está en el registro del Hub.", false);
         }
 
         private async void BtnBrowseGame_Click(object sender, RoutedEventArgs e)
@@ -439,6 +467,32 @@ namespace NeuralFX.Hub
         private async void BtnInstall_Click(object sender, RoutedEventArgs e)
         {
             if (GameDirectory is not string root) return;
+
+            // ReShade no se puede escribir con el juego abierto, así que el Hub lo cierra por la
+            // salida normal del juego y lo vuelve a abrir al terminar. Nunca mata el proceso.
+            bool restart = false;
+            if (_hardwareInfo.IsGameRunning)
+            {
+                if (_channel == null || _pid == 0)
+                {
+                    SetNotice("Cierra Cities: Skylines primero",
+                        "El proceso está abierto pero el mod no publica telemetría, así que el Hub no puede pedirle que se cierre.", false);
+                    return;
+                }
+                if (MessageBox.Show(this,
+                        "Se cerrará Cities: Skylines para escribir los archivos y se volverá a abrir al terminar.\n\nGuarda la ciudad antes: NeuralFX no la guarda por ti.",
+                        "Cerrar, instalar y volver a abrir", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+                SetNotice("Cerrando Cities: Skylines", "Esperando a que el juego termine de cerrarse antes de escribir nada.");
+                SendTelemetryCommand(CommandKind.QuitGame.ToString());
+                if (!await WaitForGameExitAsync())
+                {
+                    SetNotice("El juego sigue abierto",
+                        "No se escribió nada. Ciérralo a mano y vuelve a intentarlo.", false);
+                    return;
+                }
+                restart = true;
+            }
+
             await PerformAsync("Instalando y verificando archivos del juego", async () =>
             {
                 var preset = (PipelinePreset)PresetSelector.SelectedIndex;
@@ -454,7 +508,8 @@ namespace NeuralFX.Hub
                 _integrity.Invalidate();
 
                 string presetName = (int)preset >= 0 && (int)preset < PresetNames.Length ? PresetNames[(int)preset] : preset.ToString();
-                return new(true, "Pipeline instalado y verificado", "Componentes aplicados correctamente con perfil: " + presetName + ".\nActualiza también el mod con Install-NeuralFX.ps1 del paquete, reinicia Cities: Skylines y valida una ciudad.");
+                if (restart) LaunchGame();
+                return new(true, "Pipeline instalado y verificado", (restart ? "Abriendo Cities: Skylines de nuevo. " : "") + "Componentes aplicados con el preset " + presetName + ".\nEl mod y el Hub se actualizan con el instalador del paquete.");
             });
         }
 
