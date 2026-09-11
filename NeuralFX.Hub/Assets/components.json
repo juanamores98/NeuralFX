@@ -209,7 +209,7 @@
     "TargetRelativePath": "dlss5-feed.addon64",
     "SourceType": "Bundled",
     "CanAutoDownload": false,
-    "Version": "0.15.1-neuralfx.9",
+    "Version": "0.15.1-neuralfx.10",
     "OfficialWebUrl": "https://github.com/juanamores98/NeuralFX"
   }
 ]

@@ -45,6 +45,8 @@ public class NativeContractTests
         public uint BindFlags, MiscFlags, Usage, CpuAccess, FromView;
         public uint SlotsUsed, SlotsTotal, Accepted, Rejected;
         public uint ReservedNow, ReserveOk, ReserveDenied, Completed;
+        public uint SelectReason, SelectNative, SelectFallback;
+        public uint SelectFrameWidth, SelectFrameHeight, SelectSlotWidth, SelectSlotHeight, SelectIdentity;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 12)] public uint[] Counts;
     }
 

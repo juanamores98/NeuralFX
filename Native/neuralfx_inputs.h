@@ -20,8 +20,13 @@ static void NeuralFxReleaseSlot(NeuralFxMotionSlot& slot) {
     slot = {};
 }
 static std::atomic<uint32_t> nfx_reserve_ok{0}, nfx_reserve_denied{0}, nfx_motion_completed{0};
+// Estado del selector. Atomicos sueltos y no una estructura con candado: esto se escribe en el
+// camino de render de cada frame, y una lectura con dos campos de instantes distintos es un
+// precio aceptable por no meter un candado ahi.
+static std::atomic<uint32_t> nfx_select_reason{NFX_SEL_NO_HANDLE}, nfx_select_native{0}, nfx_select_fallback{0};
+static std::atomic<uint32_t> nfx_select_fw{0}, nfx_select_fh{0}, nfx_select_sw{0}, nfx_select_sh{0}, nfx_select_id{0};
 static std::mutex nfx_report_lock;
-static NeuralFxRegistrationReport nfx_report = {sizeof(NeuralFxRegistrationReport), 2};
+static NeuralFxRegistrationReport nfx_report = {sizeof(NeuralFxRegistrationReport), 3};
 // El informe guarda el ÚLTIMO intento, y además cuenta cuántas veces ocurrió cada motivo. Lo
 // primero sirve para diagnosticar; lo segundo, para no confundir un tropiezo aislado con un
 // rechazo sistemático, que es una distinción que el registro de sesión no podía hacer.
@@ -29,7 +34,7 @@ static void NeuralFxPublishRegistration(uint32_t stage, uint32_t reason, HRESULT
     uint32_t camera, uint32_t epoch, const D3D11_TEXTURE2D_DESC* desc, bool from_view, uint32_t used) {
     std::lock_guard<std::mutex> lock(nfx_report_lock);
     NeuralFxRegistrationReport next = {};
-    next.size = sizeof(next); next.version = 2;
+    next.size = sizeof(next); next.version = 3;
     next.request_serial = nfx_report.request_serial + 1;
     next.stage = stage; next.reason = reason; next.hresult = static_cast<int32_t>(hr);
     next.camera = camera; next.epoch = epoch; next.from_view = from_view ? 1u : 0u;
@@ -65,6 +70,12 @@ NFX_EXPORT int NFX_CALL NeuralFX_GetRegistrationReport(NeuralFxRegistrationRepor
         for (const auto& slot : nfx_motion_slots) { if (slot.handle) ++used; if (slot.reserved) ++reserved; }
     }
     out->reserved_now = reserved; out->slots_used = used;
+    out->select_reason = nfx_select_reason.load();
+    out->select_native = nfx_select_native.load();
+    out->select_fallback = nfx_select_fallback.load();
+    out->select_frame_width = nfx_select_fw.load(); out->select_frame_height = nfx_select_fh.load();
+    out->select_slot_width = nfx_select_sw.load(); out->select_slot_height = nfx_select_sh.load();
+    out->select_identity = nfx_select_id.load();
     return 1;
 }
 static uint32_t NeuralFxSlotsUsed() {
@@ -173,14 +184,44 @@ struct NeuralFxSelectedMotion {
     bool Select(ID3D11Device* device, const NeuralFxFrameV3& frame, ID3D11Texture2D* optical, ID3D11ShaderResourceView* optical_view, float optical_x, float optical_y) {
         texture = optical; texture->AddRef(); view = optical_view; view->AddRef(); texture->GetDesc(&desc);
         scale_x = optical_x; scale_y = optical_y;
-        std::lock_guard<std::mutex> lock(nfx_inputs_lock);
-        for (auto& slot : nfx_motion_slots) if (frame.motion_handle && slot.handle == frame.motion_handle && slot.reserved && slot.camera == frame.camera && slot.epoch == frame.epoch) {
-            D3D11_TEXTURE2D_DESC candidate; slot.texture->GetDesc(&candidate);
-            ID3D11Device* owner = nullptr; slot.texture->GetDevice(&owner); bool same = owner == device; owner->Release();
-            ID3D11Resource* viewed = nullptr; slot.view->GetResource(&viewed); same = same && viewed == slot.texture; viewed->Release();
-            if (!same || candidate.Width != frame.width || candidate.Height != frame.height) break;
-            texture->Release(); view->Release(); texture = slot.texture; view = slot.view; texture->AddRef(); view->AddRef();
-            desc = candidate; scale_x = frame.mv_scale_x; scale_y = frame.mv_scale_y; provider = 2; break;
+        // Se busca primero por handle y despues se comprueba cada condicion por separado. La
+        // version anterior las juntaba todas en el filtro del bucle: cuando no encajaba, no
+        // habia forma de saber cual de las cinco habia fallado.
+        uint32_t reason = frame.motion_handle ? NFX_SEL_UNKNOWN_HANDLE : NFX_SEL_NO_HANDLE;
+        uint32_t identity = 0, slot_width = 0, slot_height = 0;
+        {
+            std::lock_guard<std::mutex> lock(nfx_inputs_lock);
+            for (auto& slot : nfx_motion_slots) {
+                if (!frame.motion_handle || slot.handle != frame.motion_handle) continue;
+                if (slot.camera != frame.camera) identity |= 1;
+                if (slot.epoch != frame.epoch) identity |= 2;
+                D3D11_TEXTURE2D_DESC candidate; slot.texture->GetDesc(&candidate);
+                slot_width = candidate.Width; slot_height = candidate.Height;
+                ID3D11Device* owner = nullptr; slot.texture->GetDevice(&owner);
+                bool same_device = owner == device; owner->Release();
+                ID3D11Resource* viewed = nullptr; slot.view->GetResource(&viewed);
+                bool same_view = viewed == slot.texture; viewed->Release();
+                if (!slot.reserved) reason = NFX_SEL_NOT_RESERVED;
+                else if (identity & 1) reason = NFX_SEL_CAMERA;
+                else if (identity & 2) reason = NFX_SEL_EPOCH;
+                else if (!same_device) reason = NFX_SEL_DEVICE;
+                else if (!same_view) reason = NFX_SEL_VIEW;
+                else if (candidate.Width != frame.width || candidate.Height != frame.height) reason = NFX_SEL_EXTENT;
+                else {
+                    texture->Release(); view->Release(); texture = slot.texture; view = slot.view;
+                    texture->AddRef(); view->AddRef();
+                    desc = candidate; scale_x = frame.mv_scale_x; scale_y = frame.mv_scale_y;
+                    provider = 2; reason = NFX_SEL_USED;
+                }
+                break;
+            }
+        }
+        if (frame.motion_handle) {
+            nfx_select_reason.store(reason);
+            nfx_select_fw.store(frame.width); nfx_select_fh.store(frame.height);
+            nfx_select_sw.store(slot_width); nfx_select_sh.store(slot_height);
+            nfx_select_id.store(identity);
+            if (reason == NFX_SEL_USED) ++nfx_select_native; else ++nfx_select_fallback;
         }
         return NeuralFxFinite(scale_x) && NeuralFxFinite(scale_y);
     }

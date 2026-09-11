@@ -40,6 +40,19 @@ static constexpr uint32_t
     NFX_REG_DIMENSION = 11,        // extensión nula o fuera de límite
     NFX_REG_REASON_COUNT = 12;
 
+// Por que el selector no uso los vectores registrados. Un solo valor por causa: mezclarlas es
+// el defecto que ya costo tres sesiones en el registro y otra en la reserva.
+static constexpr uint32_t
+    NFX_SEL_USED = 0,            // se usaron los vectores de Unity
+    NFX_SEL_NO_HANDLE = 1,       // el frame no traia handle
+    NFX_SEL_UNKNOWN_HANDLE = 2,  // el handle no esta en la tabla
+    NFX_SEL_NOT_RESERVED = 3,    // el hueco no estaba reservado para este frame
+    NFX_SEL_CAMERA = 4,          // el hueco pertenece a otra camara
+    NFX_SEL_EPOCH = 5,           // el hueco pertenece a otra epoca
+    NFX_SEL_DEVICE = 6,          // el recurso vive en otro dispositivo D3D11
+    NFX_SEL_VIEW = 7,            // la vista no apunta a su propia textura
+    NFX_SEL_EXTENT = 8;          // el recurso no mide lo que el frame declara
+
 #pragma pack(push, 4)
 // Ancho fijo en los dos lados. El consumidor administrado valida `size` y `version` antes de
 // leer nada más; un puente antiguo simplemente no exporta la consulta.
@@ -63,10 +76,20 @@ struct NeuralFxRegistrationReport {
     uint32_t reserve_ok;          // reservas concedidas desde el arranque
     uint32_t reserve_denied;      // reservas negadas: el turno seguia ocupado
     uint32_t completed;           // devoluciones por trabajo GPU terminado o cancelacion
+    // Version 3. Registrar el recurso y conseguir turno tampoco basta: el selector del addon
+    // vuelve a comprobarlo todo contra el frame, y si algo no cuadra cae al descriptor optico
+    // sin decir que. Aqui queda dicho.
+    uint32_t select_reason;          // NFX_SEL_* del ultimo frame que traia handle
+    uint32_t select_native;          // frames servidos con vectores de Unity
+    uint32_t select_fallback;        // frames con handle que aun asi cayeron al optico
+    uint32_t select_frame_width, select_frame_height;   // lo que el frame declaraba
+    uint32_t select_slot_width, select_slot_height;     // lo que el recurso media
+    uint32_t select_identity;        // bit 1 camara distinta, bit 2 epoca distinta
     uint32_t counts[NFX_REG_REASON_COUNT];  // cuántas veces cada motivo, desde el arranque
 };
 #pragma pack(pop)
-static_assert(sizeof(NeuralFxRegistrationReport) == 160);
+static_assert(sizeof(NeuralFxRegistrationReport) == 192);
 static_assert(offsetof(NeuralFxRegistrationReport, reason) == 16);
 static_assert(offsetof(NeuralFxRegistrationReport, reserved_now) == 96);
-static_assert(offsetof(NeuralFxRegistrationReport, counts) == 112);
+static_assert(offsetof(NeuralFxRegistrationReport, select_reason) == 112);
+static_assert(offsetof(NeuralFxRegistrationReport, counts) == 144);

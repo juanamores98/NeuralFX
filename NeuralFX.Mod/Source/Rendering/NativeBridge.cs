@@ -53,12 +53,34 @@ namespace NeuralFX.Rendering
         public uint BindFlags, MiscFlags, Usage, CpuAccess, FromView;
         public uint SlotsUsed, SlotsTotal, Accepted, Rejected;
         public uint ReservedNow, ReserveOk, ReserveDenied, Completed;
+        public uint SelectReason, SelectNative, SelectFallback;
+        public uint SelectFrameWidth, SelectFrameHeight, SelectSlotWidth, SelectSlotHeight, SelectIdentity;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 12)] public uint[] Counts;
         /// <summary>Estado de los turnos: si las devoluciones no avanzan, la ruta se ahoga.</summary>
         public string DescribeSlots()
         {
             return "turnos " + ReservedNow + " en vuelo de " + SlotsUsed + " registrados · concedidos " +
                 ReserveOk + " · negados " + ReserveDenied + " · devueltos " + Completed;
+        }
+        /// <summary>Por que el selector del addon no uso los vectores registrados.</summary>
+        public string DescribeSelection()
+        {
+            string why;
+            switch (SelectReason)
+            {
+                case 0: why = "usados"; break;
+                case 1: why = "el frame no llevaba handle"; break;
+                case 2: why = "handle desconocido para el puente"; break;
+                case 3: why = "el hueco no estaba reservado"; break;
+                case 4: why = "el hueco es de otra camara"; break;
+                case 5: why = "el hueco es de otra epoca"; break;
+                case 6: why = "el recurso vive en otro dispositivo D3D11"; break;
+                case 7: why = "la vista no apunta a su textura"; break;
+                case 8: why = "el recurso mide " + SelectSlotWidth + "x" + SelectSlotHeight +
+                    " y el frame declara " + SelectFrameWidth + "x" + SelectFrameHeight; break;
+                default: why = "motivo " + SelectReason; break;
+            }
+            return "seleccion: " + why + " · nativos " + SelectNative + " · al optico " + SelectFallback;
         }
         /// <summary>El motivo en palabras. Es una observacion del recurso, no una causa aguas arriba.</summary>
         public string Describe()
@@ -170,7 +192,7 @@ namespace NeuralFX.Rendering
             // que no hay informe, en vez de leer memoria con otra forma.
             var data = new NativeRegistrationReport();
             uint bytes = (uint)Marshal.SizeOf(typeof(NativeRegistrationReport));
-            return _registration != null && _registration(ref data, bytes) == 1 && data.Version == 2 ? data : new NativeRegistrationReport();
+            return _registration != null && _registration(ref data, bytes) == 1 && data.Version == 3 ? data : new NativeRegistrationReport();
         }
         public NativeResult ReadResult()
         {

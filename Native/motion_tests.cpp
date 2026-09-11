@@ -45,7 +45,7 @@ static ID3D11Texture2D* Shaped(ID3D11Device* device, DXGI_FORMAT format, UINT mi
 static NeuralFxRegistrationReport Report() {
     NeuralFxRegistrationReport report={};
     assert(NeuralFX_GetRegistrationReport(&report,sizeof(report))==1);
-    assert(report.size==sizeof(report)&&report.version==2);
+    assert(report.size==sizeof(report)&&report.version==3);
     return report;
 }
 // Recorre el registro real, no un doble que siempre acepta. Un cero debe llevar SIEMPRE un
@@ -132,6 +132,33 @@ static void Registration(ID3D11Device* device) {
     auto freed=Report();
     assert(freed.reserved_now==before.reserved_now&&freed.completed==before.completed+1);
     NeuralFX_ReleaseMotion(handle);
+
+    // El selector tambien rechazaba por cinco condiciones con un solo silencio. Cada una debe
+    // dar su motivo, y el nominal debe contarse como servido.
+    auto* sized=Texture(device,257,129,0x3c00,0);
+    ID3D11ShaderResourceView* opticalView=nullptr;assert(SUCCEEDED(device->CreateShaderResourceView(sized,nullptr,&opticalView)));
+    uint32_t live=NeuralFX_RegisterMotion(sized,42,1);assert(live&&NeuralFX_ReserveMotion(live));
+    NeuralFxFrameV3 shaped={64,3,1,1,257,129,0,0,42,1,0,live,257,129,NFX_MAGIC,0};
+    struct { const char* what; uint32_t handle, camera, epoch, width, height, reason; } picks[] = {
+        {"sin handle",0,42,1,257,129,NFX_SEL_NO_HANDLE},
+        {"handle ajeno",0xBEEF,42,1,257,129,NFX_SEL_UNKNOWN_HANDLE},
+        {"otra camara",live,43,1,257,129,NFX_SEL_CAMERA},
+        {"otra epoca",live,42,2,257,129,NFX_SEL_EPOCH},
+        {"otra extension",live,42,1,256,129,NFX_SEL_EXTENT},
+        {"nominal",live,42,1,257,129,NFX_SEL_USED},
+    };
+    for (const auto& pick : picks) {
+        NeuralFxFrameV3 attempt=shaped;
+        attempt.motion_handle=pick.handle;attempt.camera=pick.camera;attempt.epoch=pick.epoch;
+        attempt.width=pick.width;attempt.height=pick.height;
+        { NeuralFxSelectedMotion chosen;assert(chosen.Select(device,attempt,sized,opticalView,1,1));
+          assert(chosen.provider==(pick.reason==NFX_SEL_USED?2u:1u)); }
+        auto seen=Report();
+        assert(seen.select_reason==pick.reason);
+        if(pick.reason==NFX_SEL_EXTENT) assert(seen.select_slot_width==257&&seen.select_frame_width==256);
+    }
+    assert(Report().select_native>=1&&Report().select_fallback>=4);
+    NeuralFX_ReleaseMotion(live);opticalView->Release();sized->Release();
     good->Release();
 }
 int main(){

@@ -33,6 +33,9 @@ namespace NeuralFX
         public string BridgeReason { get { return _bridge.Reason; } }
         /// <summary>Por qué la ruta de vectores de Unity entró o no. Null si no hay cámara.</summary>
         internal string MotionState { get { return _temporal != null ? _temporal.MotionState : null; } }
+        private Rendering.NativeRegistrationReport _registration;
+        /// <summary>Veredicto del selector del addon, o null si este puente no lo publica.</summary>
+        internal string MotionSelection { get { return _registration.Size != 0 ? _registration.DescribeSelection() : null; } }
         public static void ToggleWindow() { if (_instance != null) _instance._panel.Toggle(); }
         public void Awake()
         {
@@ -69,7 +72,14 @@ namespace NeuralFX
                 if (NativeInterop.IsModuleLoaded("renodx-dlss5.addon64")) _moduleFlags |= RuntimeFlags.ConsumerLoaded;
                 if (!_bridge.Connected) _bridge.Connect();
             }
-            if (now >= _scanAt) { _scanAt = now + 5; _conflicts = ModSettings.WarnOnAaConflict ? AaConflictScanner.Scan(_camera) : new string[0]; }
+            if (now >= _scanAt)
+            {
+                _scanAt = now + 5;
+                _conflicts = ModSettings.WarnOnAaConflict ? AaConflictScanner.Scan(_camera) : new string[0];
+                // Cada cinco segundos, no cada fotograma: el informe cruza la frontera nativa
+                // con marshalling y su cadencia util es la del registro de sesion, no la del render.
+                _registration = _bridge.ReadRegistrationReport();
+            }
             if (ModSettings.EnableHotkey && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) &&
                 (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) && Input.GetKeyDown(KeyCode.N) && !UI.TelemetryPanel.HasTextFocus()) ToggleWindow();
             TelemetryCommand command;
@@ -135,7 +145,7 @@ namespace NeuralFX
             };
             if (_channel != null) _channel.Publish(CurrentFrame);
             Config.SessionLog.Tick(now, CurrentFrame, Health, _fps, _frameMs, ControlMessage,
-                _conflicts.Length == 0 ? null : "AA adicional: " + string.Join(", ", _conflicts), MotionState);
+                _conflicts.Length == 0 ? null : "AA adicional: " + string.Join(", ", _conflicts), MotionState, MotionSelection);
             if (_panel.Visible) _panel.Update(CurrentFrame,
                 !string.IsNullOrEmpty(ModSettings.LastSaveError) ? "Guardado pendiente: " + ModSettings.LastSaveError :
                 _temporal != null && _temporal.RestoreConflict ? "Se conserva un cambio posterior de otro mod en la cámara." :

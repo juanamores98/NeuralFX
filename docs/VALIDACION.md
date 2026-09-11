@@ -180,6 +180,34 @@ Con eso, la siguiente sesión distingue sin ambigüedad entre «se conceden y nu
 
 Feeder a `0.15.1-neuralfx.9`.
 
+### La copia se emite y los turnos vuelven; falla el selector
+
+Con los dos motivos separados y el estado vivo de turnos, la sesión siguiente contesta las dos preguntas a la vez:
+
+```text
+movimiento=1 (Unity: enviado 1920x967 en 0,113)                        56 muestras
+movimiento=1 (Unity: sin enviar: turnos 3 en vuelo de 3 registrados
+              · concedidos 1549 · negados 1639 · devueltos 1546)        1 muestra
+```
+
+- **No hay fuga de vida útil.** 1.546 devoluciones de 1.549 concesiones. La hipótesis de que los turnos no volvían queda descartada.
+- **La copia se emite.** El mod entrega el handle en 56 de 58 muestras.
+- **Y aun así `movimiento=1`.** El selector del addon recibe el handle y lo descarta.
+
+`NeuralFxSelectedMotion::Select` comprobaba cinco condiciones **dentro del filtro del bucle** —handle, reserva, cámara, época— y otras tres dentro. Si algo no encajaba, el bucle no entraba y no quedaba constancia de cuál. Es el mismo defecto que ya costó tres sesiones en el registro y una en la reserva, en un tercer sitio.
+
+Ahora busca por handle y comprueba cada condición por separado, con un motivo propio: sin handle, handle desconocido, hueco sin reservar, otra cámara, otra época, otro dispositivo D3D11, vista que no apunta a su textura, o extensión distinta —y en ese caso publica las dos extensiones para poder compararlas—. Cuenta además cuántos frames se sirvieron con vectores de Unity y cuántos cayeron al óptico.
+
+Informe a **versión 3** (192 B). El fixture WARP ejercita las seis rutas del selector, incluida la nominal.
+
+**Los turnos denegados son reales pero secundarios:** 1.639 negados frente a 1.549 concedidos indica que tres huecos no cubren la latencia de la GPU. No se toca todavía: cambiar la profundidad de la reserva a la vez que el selector confundiría la próxima medida. Se decidirá con el dato, no antes.
+
+Feeder a `0.15.1-neuralfx.10`.
+
+### El despliegue deja de pedir un clic
+
+`tools/package.ps1 -Deploy` instalaba mod y Hub, pero el addon nativo de la carpeta del juego lo escribía solo el botón **Aplicar preset / reinstalar**. Tres entregas seguidas terminaron pidiéndole eso al usuario. `tools/NeuralFX.PipelineInstall` lo hace ahora por el **mismo motor transaccional** que el botón —no copiando archivos, que dejaría el manifiesto mintiendo—, respetando el ejecutable y el preset guardados, negándose si CS1 está abierto, y **verificando por hash lo que quedó escrito**. `-Deploy` lo invoca solo si el addon instalado no coincide con el construido.
+
 ### Lo que este corte no resuelve
 
 Que el registro acepte el recurso **acredita transporte, no calidad de los vectores**. Sigue sin verificarse la geometría de origen y destino de la copia: se presupone que la textura de `BuiltinRenderTextureType.MotionVectors` mide lo que la cámara, y si midiera lo que la pantalla la copia quedaría desplazada. Tampoco están verificadas las unidades ni el signo del vector, que son magnitudes distintas de su colocación. Nada de esto se ha tocado aquí, y la próxima sesión solo puede demostrar que la ruta entra, no que sus datos sean correctos.
