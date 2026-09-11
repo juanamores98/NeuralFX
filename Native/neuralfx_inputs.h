@@ -84,9 +84,14 @@ NFX_EXPORT uint32_t NFX_CALL NeuralFX_RegisterMotion(void* pointer, uint32_t cam
     D3D11_TEXTURE2D_DESC desc; texture->GetDesc(&desc);
     // El descriptor se publica antes de juzgarlo: si se rechaza, el informe ya lleva lo que se
     // vio, que es justamente el dato que faltaba.
+    // El formato se acepta por familia, nunca por tamaño en bytes. Unity crea la RenderTexture
+    // RGHalf como R16G16_TYPELESS (33) y pone encima las vistas tipadas; exigir R16G16_FLOAT
+    // (34) rechazaba el recurso correcto. Cualquier otro formato de dos canales de 16 bits
+    // —UNORM, SNORM, UINT, SINT— tiene otra interpretación y se sigue rechazando.
+    const bool typeless = desc.Format == DXGI_FORMAT_R16G16_TYPELESS;
     uint32_t reason = NFX_REG_OK;
     if (!desc.Width || !desc.Height) reason = NFX_REG_DIMENSION;
-    else if (desc.Format != DXGI_FORMAT_R16G16_FLOAT) reason = NFX_REG_FORMAT;
+    else if (desc.Format != DXGI_FORMAT_R16G16_FLOAT && !typeless) reason = NFX_REG_FORMAT;
     else if (desc.SampleDesc.Count != 1) reason = NFX_REG_SAMPLES;
     else if (desc.MipLevels != 1) reason = NFX_REG_MIPS;
     else if (desc.ArraySize != 1) reason = NFX_REG_ARRAY;
@@ -96,8 +101,15 @@ NFX_EXPORT uint32_t NFX_CALL NeuralFX_RegisterMotion(void* pointer, uint32_t cam
         texture->Release(); return 0;
     }
     ID3D11Device* device = nullptr; texture->GetDevice(&device);
+    // La vista se pide siempre con descriptor explícito. Sobre un recurso tipeless un nullptr
+    // falla —no hay interpretación que deducir—, y sobre uno tipado deja el contrato escrito en
+    // vez de heredado. La lectura es R16G16_FLOAT en ambos casos, que es lo que espera NGX.
+    D3D11_SHADER_RESOURCE_VIEW_DESC look = {};
+    look.Format = DXGI_FORMAT_R16G16_FLOAT;
+    look.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    look.Texture2D.MostDetailedMip = 0; look.Texture2D.MipLevels = 1;
     ID3D11ShaderResourceView* view = nullptr;
-    HRESULT created = device->CreateShaderResourceView(texture, nullptr, &view); device->Release();
+    HRESULT created = device->CreateShaderResourceView(texture, &look, &view); device->Release();
     if (FAILED(created) || !view) {
         NeuralFxPublishRegistration(NFX_REG_STAGE_VIEW, NFX_REG_VIEW, created, camera, epoch, &desc, from_view, NeuralFxSlotsUsed());
         texture->Release(); return 0;

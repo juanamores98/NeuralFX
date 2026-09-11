@@ -142,9 +142,30 @@ El fixture WARP acredita **registro y transporte**, no NGX, ni Unity, ni la capt
 
 Versión del feeder sincronizada a `0.15.1-neuralfx.7` en `Native/build.ps1` y en el catálogo del Hub, que se habían separado.
 
+### La medida: formato 33
+
+La primera partida con el addon instrumentado dejó escrito el motivo en la primera entrada:
+
+```text
+movimiento=1 (Unity: reserva rechazada: el puente rechazó la textura 0: formato 33 ...)
+```
+
+**33 es `DXGI_FORMAT_R16G16_TYPELESS`** (verificado contra `dxgiformat.h` del SDK 10.0.26100.0, no de memoria). Unity crea la `RenderTexture` `RGHalf` como recurso **tipeless** y pone encima las vistas tipadas. El puente exigía exactamente `R16G16_FLOAT`, que es **34**, y rechazaba el recurso correcto. Eso, y no otra cosa, es por lo que la ruta de vectores de Unity nunca llegó a entrar en ninguna sesión.
+
+Dos cambios, y hacían falta los dos:
+
+1. El formato se acepta **por familia**: `R16G16_FLOAT` o `R16G16_TYPELESS`. Nunca por bytes por píxel — `R16G16_UNORM` y `R16G16_SINT` miden lo mismo y significan otra cosa; ambos siguen rechazados, y hay prueba de cada uno.
+2. La vista se pide **siempre con descriptor explícito** `R16G16_FLOAT`. Sobre un recurso tipeless un `nullptr` falla, porque no hay interpretación que deducir; sobre uno tipado deja el contrato escrito en vez de heredado.
+
+El mensaje del mod decía «se esperaba R16G16_FLOAT (10)». **10 es `R16G16B16A16_FLOAT`**: la constante estaba mal escrita en el texto, no en la comprobación. Corregido.
+
+Feeder a `0.15.1-neuralfx.8`, en `Native/build.ps1` y en el catálogo a la vez.
+
 ### Lo que este corte no resuelve
 
-El motivo concreto del rechazo en CS1 **sigue sin conocerse**: se ha construido el instrumento, no se ha leído todavía la medida. La primera partida normal con el addon actualizado lo dejará escrito. Tampoco se ha tocado la profundidad, ni la geometría de origen/destino de los vectores, ni el aislamiento de la interfaz.
+Que el registro acepte el recurso **acredita transporte, no calidad de los vectores**. Sigue sin verificarse la geometría de origen y destino de la copia: se presupone que la textura de `BuiltinRenderTextureType.MotionVectors` mide lo que la cámara, y si midiera lo que la pantalla la copia quedaría desplazada. Tampoco están verificadas las unidades ni el signo del vector, que son magnitudes distintas de su colocación. Nada de esto se ha tocado aquí, y la próxima sesión solo puede demostrar que la ruta entra, no que sus datos sean correctos.
+
+Tampoco se ha tocado la profundidad —plana en 13 de 29 sondas, sin origen identificado— ni el aislamiento de la interfaz.
 
 ## Pendientes
 

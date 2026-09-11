@@ -70,6 +70,10 @@ static void Registration(ID3D11Device* device) {
 
     struct { DXGI_FORMAT format; UINT mips, slices, bind; uint32_t reason; } cases[] = {
         {DXGI_FORMAT_R8G8B8A8_UNORM,1,1,D3D11_BIND_SHADER_RESOURCE,NFX_REG_FORMAT},
+        // Misma anchura de canal, otra interpretación: se rechaza. El formato se acepta por
+        // familia, jamás por bytes por píxel.
+        {DXGI_FORMAT_R16G16_UNORM,1,1,D3D11_BIND_SHADER_RESOURCE,NFX_REG_FORMAT},
+        {DXGI_FORMAT_R16G16_SINT,1,1,D3D11_BIND_SHADER_RESOURCE,NFX_REG_FORMAT},
         {DXGI_FORMAT_R16G16_FLOAT,2,1,D3D11_BIND_SHADER_RESOURCE,NFX_REG_MIPS},
         {DXGI_FORMAT_R16G16_FLOAT,1,2,D3D11_BIND_SHADER_RESOURCE,NFX_REG_ARRAY},
         {DXGI_FORMAT_R16G16_FLOAT,1,1,D3D11_BIND_RENDER_TARGET,NFX_REG_BIND_SRV},
@@ -91,6 +95,15 @@ static void Registration(ID3D11Device* device) {
     assert(ok.bind_flags&D3D11_BIND_SHADER_RESOURCE);
     assert(ok.slots_used==1&&ok.slots_total==16&&ok.accepted==1);
     NeuralFX_ReleaseMotion(handle);
+
+    // El caso que CS1 entrega de verdad, medido el 11-sep-2026: Unity crea la RenderTexture
+    // RGHalf como R16G16_TYPELESS (33) y el puente exigia R16G16_FLOAT (34). Se acepta la
+    // familia y la vista se pide tipada; con nullptr, sobre un tipeless, fallaria.
+    auto* opaque=Shaped(device,DXGI_FORMAT_R16G16_TYPELESS,1,1,D3D11_BIND_SHADER_RESOURCE);
+    handle=NeuralFX_RegisterMotion(opaque,7,3);assert(handle);
+    auto blind=Report();
+    assert(blind.reason==NFX_REG_OK&&blind.stage==NFX_REG_STAGE_DONE&&blind.format==DXGI_FORMAT_R16G16_TYPELESS);
+    NeuralFX_ReleaseMotion(handle);opaque->Release();
 
     // Contrato adicional declarado: si llega una vista, se pide su recurso. Esto NO afirma que
     // Unity entregue vistas; acredita que el registro no se rompe si las recibe.

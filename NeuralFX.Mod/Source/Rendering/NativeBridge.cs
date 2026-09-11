@@ -63,7 +63,7 @@ namespace NeuralFX.Rendering
                 case 1: reason = "puntero nulo"; break;
                 case 2: reason = "camara o epoca invalidas"; break;
                 case 3: reason = "el recurso no expone ID3D11Texture2D"; break;
-                case 4: reason = "formato " + Format + ", se esperaba R16G16_FLOAT (10)"; break;
+                case 4: reason = "formato " + Format + "; se admite R16G16_FLOAT (34) o R16G16_TYPELESS (33)"; break;
                 case 5: reason = "multisample x" + SampleCount; break;
                 case 6: reason = MipLevels + " niveles de mip"; break;
                 case 7: reason = "array de " + ArraySize; break;
@@ -73,9 +73,10 @@ namespace NeuralFX.Rendering
                 case 11: reason = "extension " + Width + "x" + Height; break;
                 default: reason = "motivo " + Reason; break;
             }
+            string family = Format == 33 ? " tipeless" : Format == 34 ? " float" : "";
             string shape = Width == 0 && Height == 0 ? "" :
                 " · recurso " + Width + "x" + Height + " fmt=" + Format + " mips=" + MipLevels +
-                " array=" + ArraySize + " aa=" + SampleCount + " bind=0x" + BindFlags.ToString("X") +
+                " array=" + ArraySize + " aa=" + SampleCount + family + " bind=0x" + BindFlags.ToString("X") +
                 " uso=" + Usage + (FromView != 0 ? " (desde vista)" : "");
             return reason + " [etapa " + Stage + ", intento " + RequestSerial + "]" + shape;
         }
