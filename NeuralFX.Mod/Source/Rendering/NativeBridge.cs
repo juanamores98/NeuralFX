@@ -41,6 +41,45 @@ namespace NeuralFX.Rendering
         public float FeedCpuMs, FeedGpuMs, FrameIntervalMs;
         public uint Stalls;
     }
+    // Informe del ultimo intento de registro de movimiento. Opcional: un puente anterior no lo
+    // exporta y el mod sigue funcionando sin el, solo que sin poder decir por que fallo.
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    internal struct NativeRegistrationReport
+    {
+        public uint Size, Version, RequestSerial, Stage, Reason;
+        public int HResult;
+        public uint Camera, Epoch, Width, Height, Format;
+        public uint MipLevels, ArraySize, SampleCount, SampleQuality;
+        public uint BindFlags, MiscFlags, Usage, CpuAccess, FromView;
+        public uint SlotsUsed, SlotsTotal, Accepted, Rejected;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 12)] public uint[] Counts;
+        /// <summary>El motivo en palabras. Es una observacion del recurso, no una causa aguas arriba.</summary>
+        public string Describe()
+        {
+            string reason;
+            switch (Reason)
+            {
+                case 0: reason = "aceptado"; break;
+                case 1: reason = "puntero nulo"; break;
+                case 2: reason = "camara o epoca invalidas"; break;
+                case 3: reason = "el recurso no expone ID3D11Texture2D"; break;
+                case 4: reason = "formato " + Format + ", se esperaba R16G16_FLOAT (10)"; break;
+                case 5: reason = "multisample x" + SampleCount; break;
+                case 6: reason = MipLevels + " niveles de mip"; break;
+                case 7: reason = "array de " + ArraySize; break;
+                case 8: reason = "sin permiso de lectura (bind 0x" + BindFlags.ToString("X") + ")"; break;
+                case 9: reason = "no se pudo crear la vista de lectura (HRESULT 0x" + HResult.ToString("X8") + ")"; break;
+                case 10: reason = "huecos agotados (" + SlotsUsed + "/" + SlotsTotal + ")"; break;
+                case 11: reason = "extension " + Width + "x" + Height; break;
+                default: reason = "motivo " + Reason; break;
+            }
+            string shape = Width == 0 && Height == 0 ? "" :
+                " · recurso " + Width + "x" + Height + " fmt=" + Format + " mips=" + MipLevels +
+                " array=" + ArraySize + " aa=" + SampleCount + " bind=0x" + BindFlags.ToString("X") +
+                " uso=" + Usage + (FromView != 0 ? " (desde vista)" : "");
+            return reason + " [etapa " + Stage + ", intento " + RequestSerial + "]" + shape;
+        }
+    }
     internal sealed class NativeBridge
     {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SubmitDelegate(ref NativeFrame data, uint bytes);
@@ -54,10 +93,12 @@ namespace NeuralFX.Rendering
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void ReleaseDelegate(uint handle);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ControlsDelegate(ref NativeControls data, uint bytes);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int HealthDelegate(ref NativeHealth data, uint bytes);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int RegistrationDelegate(ref NativeRegistrationReport data, uint bytes);
         private ControlsDelegate _setControls, _getControls;
         private SubmitDelegate _submit; private StatusDelegate _status; private ResultDelegate _result;
         private EnableDelegate _enable; private RegisterDelegate _register; private ReserveDelegate _reserve; private ReleaseDelegate _release, _cancel;
         private HealthDelegate _health;
+        private RegistrationDelegate _registration;
         public NativeCapabilities Capabilities { get; private set; }
         public string Reason { get; private set; }
         public IntPtr RenderEvent { get; private set; }
@@ -88,6 +129,7 @@ namespace NeuralFX.Rendering
             _setControls = (ControlsDelegate)Resolve(module, "NeuralFX_SetControls", typeof(ControlsDelegate));
             _getControls = (ControlsDelegate)Resolve(module, "NeuralFX_GetControls", typeof(ControlsDelegate));
             _health = (HealthDelegate)Resolve(module, "NeuralFX_GetHealth", typeof(HealthDelegate));
+            _registration = (RegistrationDelegate)Resolve(module, "NeuralFX_GetRegistrationReport", typeof(RegistrationDelegate));
             RenderEvent = callback != null ? callback() : IntPtr.Zero;
             Capabilities = caps; Reason = Connected ? (_health != null ? "Puente ABI 3 build 5 con salida de salud; NR sin confirmar" : "Puente ABI 3 build 5; NR sin confirmar") : "Exports incompletos";
             return Connected;
@@ -111,6 +153,16 @@ namespace NeuralFX.Rendering
         {
             var data = new NativeHealth();
             return Connected && _health != null && _health(ref data, 64) == 1 && data.Version == 1 ? data : new NativeHealth();
+        }
+        /// <summary>Ultimo intento de registro, o Size=0 si este puente no lo publica.</summary>
+        public NativeRegistrationReport ReadRegistrationReport()
+        {
+            // El tamano sale del propio tipo, no de una constante escrita a mano: si alguien
+            // anade un campo aqui y no en el header, el puente rechaza la consulta y el mod dice
+            // que no hay informe, en vez de leer memoria con otra forma.
+            var data = new NativeRegistrationReport();
+            uint bytes = (uint)Marshal.SizeOf(typeof(NativeRegistrationReport));
+            return _registration != null && _registration(ref data, bytes) == 1 && data.Version == 1 ? data : new NativeRegistrationReport();
         }
         public NativeResult ReadResult()
         {

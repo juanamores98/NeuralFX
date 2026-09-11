@@ -35,8 +35,81 @@ static void Probe(ID3D11Device* device,ID3D11DeviceContext* context,const Neural
     D3D11_MAPPED_SUBRESOURCE map={};assert(SUCCEEDED(context->Map(staging,0,D3D11_MAP_READ,0,&map)));auto* pixel=static_cast<uint16_t*>(map.pData);
     assert(pixel[0]==(expectNative?0x3c00:0)&&pixel[1]==(expectNative?0:0x4000));context->Unmap(staging,0);staging->Release();output->Release();
 }
+// Recurso a medida para los casos negativos: cada uno mueve un solo campo del descriptor, de
+// modo que el motivo publicado no pueda deberse a otra cosa.
+static ID3D11Texture2D* Shaped(ID3D11Device* device, DXGI_FORMAT format, UINT mips, UINT slices, UINT bind) {
+    D3D11_TEXTURE2D_DESC d={};d.Width=64;d.Height=64;d.MipLevels=mips;d.ArraySize=slices;d.Format=format;d.SampleDesc.Count=1;d.BindFlags=bind;
+    if(mips!=1) d.BindFlags|=D3D11_BIND_RENDER_TARGET, d.MiscFlags=D3D11_RESOURCE_MISC_GENERATE_MIPS;
+    ID3D11Texture2D* texture=nullptr;assert(SUCCEEDED(device->CreateTexture2D(&d,nullptr,&texture)));return texture;
+}
+static NeuralFxRegistrationReport Report() {
+    NeuralFxRegistrationReport report={};
+    assert(NeuralFX_GetRegistrationReport(&report,sizeof(report))==1);
+    assert(report.size==sizeof(report)&&report.version==1);
+    return report;
+}
+// Recorre el registro real, no un doble que siempre acepta. Un cero debe llevar SIEMPRE un
+// motivo único y el descriptor que se llegó a leer.
+static void Registration(ID3D11Device* device) {
+    assert(NeuralFX_GetRegistrationReport(nullptr,sizeof(NeuralFxRegistrationReport))==0);
+    NeuralFxRegistrationReport probe={};assert(NeuralFX_GetRegistrationReport(&probe,4)==0); // tamaño ajeno rechazado
+
+    assert(NeuralFX_RegisterMotion(nullptr,1,1)==0);
+    assert(Report().reason==NFX_REG_NULL_POINTER&&Report().stage==NFX_REG_STAGE_INPUT);
+    auto* good=Shaped(device,DXGI_FORMAT_R16G16_FLOAT,1,1,D3D11_BIND_SHADER_RESOURCE);
+    assert(NeuralFX_RegisterMotion(good,0,1)==0&&Report().reason==NFX_REG_BAD_IDENTITY);
+    assert(NeuralFX_RegisterMotion(good,1,0)==0&&Report().reason==NFX_REG_BAD_IDENTITY);
+
+    // Un objeto COM que no es textura ni vista: se rechaza con motivo propio en vez de leer
+    // un descriptor inventado desde una vtable equivocada.
+    D3D11_BUFFER_DESC bd={};bd.ByteWidth=256;bd.BindFlags=D3D11_BIND_SHADER_RESOURCE;bd.MiscFlags=D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;bd.StructureByteStride=16;
+    ID3D11Buffer* buffer=nullptr;assert(SUCCEEDED(device->CreateBuffer(&bd,nullptr,&buffer)));
+    assert(NeuralFX_RegisterMotion(buffer,1,1)==0);
+    assert(Report().reason==NFX_REG_QUERY_INTERFACE&&Report().stage==NFX_REG_STAGE_INTERFACE&&Report().width==0);
+    buffer->Release();
+
+    struct { DXGI_FORMAT format; UINT mips, slices, bind; uint32_t reason; } cases[] = {
+        {DXGI_FORMAT_R8G8B8A8_UNORM,1,1,D3D11_BIND_SHADER_RESOURCE,NFX_REG_FORMAT},
+        {DXGI_FORMAT_R16G16_FLOAT,2,1,D3D11_BIND_SHADER_RESOURCE,NFX_REG_MIPS},
+        {DXGI_FORMAT_R16G16_FLOAT,1,2,D3D11_BIND_SHADER_RESOURCE,NFX_REG_ARRAY},
+        {DXGI_FORMAT_R16G16_FLOAT,1,1,D3D11_BIND_RENDER_TARGET,NFX_REG_BIND_SRV},
+    };
+    for (const auto& item : cases) {
+        auto* texture=Shaped(device,item.format,item.mips,item.slices,item.bind);
+        assert(NeuralFX_RegisterMotion(texture,7,3)==0);
+        auto report=Report();
+        assert(report.reason==item.reason&&report.stage==NFX_REG_STAGE_DESCRIPTOR);
+        assert(report.width==64&&report.height==64&&report.camera==7&&report.epoch==3); // descriptor real, no supuesto
+        texture->Release();
+    }
+
+    // Caso nominal y su informe completo.
+    uint32_t handle=NeuralFX_RegisterMotion(good,7,3);assert(handle);
+    auto ok=Report();
+    assert(ok.reason==NFX_REG_OK&&ok.stage==NFX_REG_STAGE_DONE&&ok.hresult==0&&ok.from_view==0);
+    assert(ok.format==DXGI_FORMAT_R16G16_FLOAT&&ok.mip_levels==1&&ok.array_size==1&&ok.sample_count==1);
+    assert(ok.bind_flags&D3D11_BIND_SHADER_RESOURCE);
+    assert(ok.slots_used==1&&ok.slots_total==16&&ok.accepted==1);
+    NeuralFX_ReleaseMotion(handle);
+
+    // Contrato adicional declarado: si llega una vista, se pide su recurso. Esto NO afirma que
+    // Unity entregue vistas; acredita que el registro no se rompe si las recibe.
+    ID3D11ShaderResourceView* view=nullptr;assert(SUCCEEDED(device->CreateShaderResourceView(good,nullptr,&view)));
+    handle=NeuralFX_RegisterMotion(view,7,3);assert(handle&&Report().from_view==1&&Report().reason==NFX_REG_OK);
+    NeuralFX_ReleaseMotion(handle);view->Release();
+
+    // Huecos agotados: motivo propio, y la tabla no crece.
+    uint32_t held[16]={};
+    for(int i=0;i<16;i++){held[i]=NeuralFX_RegisterMotion(good,7,3);assert(held[i]);}
+    assert(NeuralFX_RegisterMotion(good,7,3)==0);
+    auto full=Report();assert(full.reason==NFX_REG_SLOTS&&full.stage==NFX_REG_STAGE_SLOT&&full.slots_used==16);
+    for(int i=0;i<16;i++) NeuralFX_ReleaseMotion(held[i]);
+    assert(Report().counts[NFX_REG_OK]>=17&&Report().rejected>=8);
+    good->Release();
+}
 int main(){
     ID3D11Device* device=nullptr;ID3D11DeviceContext* context=nullptr;assert(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));
+    Registration(device);
     auto* optical=Texture(device,257,129,0,0x4000);auto* native=Texture(device,257,129,0x3c00,0);ID3D11ShaderResourceView* opticalView=nullptr;assert(SUCCEEDED(device->CreateShaderResourceView(optical,nullptr,&opticalView)));
     uint32_t handle=NeuralFX_RegisterMotion(native,42,1);assert(handle&&NeuralFX_ReserveMotion(handle));assert(!NeuralFX_ReserveMotion(handle));
     NeuralFxFrameV3 frame={64,3,1,1,257,129,0,0,42,1,0,handle,257,129,NFX_MAGIC,0};
@@ -60,5 +133,5 @@ int main(){
     }
     assert(retired); // own COM retention ended only after the event query
     opticalView->Release();optical->Release();native->Release();context->Release();device->Release();
-    std::puts("D3D11 WARP: registered resource/SRV/scale selection, optical fallback, epochs, bounded reservation, 100/85/66 percent and odd extents passed. Not an NGX/CS1 capture.");
+    std::puts("D3D11 WARP: registro nominal, once motivos de rechazo con descriptor real, recurso desde vista, huecos agotados, seleccion de recurso/SRV/escala, respaldo optico, epocas, reserva acotada y 100/85/66 por ciento. No es una captura NGX ni de CS1.");
 }

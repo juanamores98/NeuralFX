@@ -3,6 +3,7 @@
 #include "neuralfx_ngx.h"
 #include <d3d11.h>
 #include "neuralfx_bridge.h"
+#include "neuralfx_registration_report.h"
 struct NeuralFxMotionSlot {
     uint32_t handle = 0, camera = 0, epoch = 0;
     ID3D11Texture2D* texture = nullptr;
@@ -17,23 +18,101 @@ static void NeuralFxReleaseSlot(NeuralFxMotionSlot& slot) {
     if (slot.texture) slot.texture->Release();
     slot = {};
 }
+static std::mutex nfx_report_lock;
+static NeuralFxRegistrationReport nfx_report = {sizeof(NeuralFxRegistrationReport), 1};
+// El informe guarda el ÚLTIMO intento, y además cuenta cuántas veces ocurrió cada motivo. Lo
+// primero sirve para diagnosticar; lo segundo, para no confundir un tropiezo aislado con un
+// rechazo sistemático, que es una distinción que el registro de sesión no podía hacer.
+static void NeuralFxPublishRegistration(uint32_t stage, uint32_t reason, HRESULT hr,
+    uint32_t camera, uint32_t epoch, const D3D11_TEXTURE2D_DESC* desc, bool from_view, uint32_t used) {
+    std::lock_guard<std::mutex> lock(nfx_report_lock);
+    NeuralFxRegistrationReport next = {};
+    next.size = sizeof(next); next.version = 1;
+    next.request_serial = nfx_report.request_serial + 1;
+    next.stage = stage; next.reason = reason; next.hresult = static_cast<int32_t>(hr);
+    next.camera = camera; next.epoch = epoch; next.from_view = from_view ? 1u : 0u;
+    if (desc) {
+        next.width = desc->Width; next.height = desc->Height; next.format = desc->Format;
+        next.mip_levels = desc->MipLevels; next.array_size = desc->ArraySize;
+        next.sample_count = desc->SampleDesc.Count; next.sample_quality = desc->SampleDesc.Quality;
+        next.bind_flags = desc->BindFlags; next.misc_flags = desc->MiscFlags;
+        next.usage = desc->Usage; next.cpu_access = desc->CPUAccessFlags;
+    }
+    next.slots_used = used; next.slots_total = static_cast<uint32_t>(sizeof(nfx_motion_slots) / sizeof(nfx_motion_slots[0]));
+    next.accepted = nfx_report.accepted + (reason == NFX_REG_OK ? 1u : 0u);
+    next.rejected = nfx_report.rejected + (reason == NFX_REG_OK ? 0u : 1u);
+    for (uint32_t i = 0; i < NFX_REG_REASON_COUNT; ++i) next.counts[i] = nfx_report.counts[i];
+    if (reason < NFX_REG_REASON_COUNT) ++next.counts[reason];
+    nfx_report = next;
+}
+/// <summary>Último intento de registro, con su descriptor real. Nunca bloquea al render.</summary>
+NFX_EXPORT int NFX_CALL NeuralFX_GetRegistrationReport(NeuralFxRegistrationReport* out, uint32_t bytes) {
+    if (!out || bytes != sizeof(NeuralFxRegistrationReport)) return 0;
+    std::lock_guard<std::mutex> lock(nfx_report_lock);
+    *out = nfx_report; return 1;
+}
+static uint32_t NeuralFxSlotsUsed() {
+    uint32_t used = 0;
+    for (const auto& slot : nfx_motion_slots) if (slot.handle) ++used;
+    return used;
+}
 NFX_EXPORT uint32_t NFX_CALL NeuralFX_RegisterMotion(void* pointer, uint32_t camera, uint32_t epoch) {
-    if (!pointer || !camera || !epoch) return 0;
+    if (!pointer) { NeuralFxPublishRegistration(NFX_REG_STAGE_INPUT, NFX_REG_NULL_POINTER, S_OK, camera, epoch, nullptr, false, 0); return 0; }
+    if (!camera || !epoch) { NeuralFxPublishRegistration(NFX_REG_STAGE_INPUT, NFX_REG_BAD_IDENTITY, S_OK, camera, epoch, nullptr, false, 0); return 0; }
     // Only the trusted mod registers its own live RenderTexture during creation.
-    auto* texture = static_cast<ID3D11Texture2D*>(pointer);
+    //
+    // Se pregunta por la interfaz en vez de suponerla. La documentación de Unity 5.6 dice que
+    // GetNativeTexturePtr entrega un ID3D11Resource en D3D11; un static_cast a ID3D11Texture2D
+    // y un GetDesc sobre otra cosa sería comportamiento indefinido, y el motivo del rechazo
+    // quedaría además indistinguible. Si el objeto resulta ser una vista, se pide su recurso:
+    // es un contrato adicional declarado aquí, no una afirmación sobre lo que Unity entrega.
+    auto* unknown = static_cast<IUnknown*>(pointer);
+    ID3D11Texture2D* texture = nullptr; bool from_view = false;
+    HRESULT hr = unknown->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&texture));
+    if (FAILED(hr) || !texture) {
+        ID3D11View* view_object = nullptr;
+        if (SUCCEEDED(unknown->QueryInterface(__uuidof(ID3D11View), reinterpret_cast<void**>(&view_object))) && view_object) {
+            ID3D11Resource* resource = nullptr; view_object->GetResource(&resource); view_object->Release();
+            if (resource) {
+                HRESULT from = resource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&texture));
+                resource->Release();
+                if (SUCCEEDED(from) && texture) { from_view = true; hr = S_OK; }
+            }
+        }
+    }
+    if (!texture) { NeuralFxPublishRegistration(NFX_REG_STAGE_INTERFACE, NFX_REG_QUERY_INTERFACE, hr, camera, epoch, nullptr, false, NeuralFxSlotsUsed()); return 0; }
     D3D11_TEXTURE2D_DESC desc; texture->GetDesc(&desc);
-    if (desc.Format != DXGI_FORMAT_R16G16_FLOAT || desc.SampleDesc.Count != 1 || desc.MipLevels != 1 || desc.ArraySize != 1 || !(desc.BindFlags & D3D11_BIND_SHADER_RESOURCE)) return 0;
+    // El descriptor se publica antes de juzgarlo: si se rechaza, el informe ya lleva lo que se
+    // vio, que es justamente el dato que faltaba.
+    uint32_t reason = NFX_REG_OK;
+    if (!desc.Width || !desc.Height) reason = NFX_REG_DIMENSION;
+    else if (desc.Format != DXGI_FORMAT_R16G16_FLOAT) reason = NFX_REG_FORMAT;
+    else if (desc.SampleDesc.Count != 1) reason = NFX_REG_SAMPLES;
+    else if (desc.MipLevels != 1) reason = NFX_REG_MIPS;
+    else if (desc.ArraySize != 1) reason = NFX_REG_ARRAY;
+    else if (!(desc.BindFlags & D3D11_BIND_SHADER_RESOURCE)) reason = NFX_REG_BIND_SRV;
+    if (reason != NFX_REG_OK) {
+        NeuralFxPublishRegistration(NFX_REG_STAGE_DESCRIPTOR, reason, S_OK, camera, epoch, &desc, from_view, NeuralFxSlotsUsed());
+        texture->Release(); return 0;
+    }
     ID3D11Device* device = nullptr; texture->GetDevice(&device);
     ID3D11ShaderResourceView* view = nullptr;
-    HRESULT hr = device->CreateShaderResourceView(texture, nullptr, &view); device->Release();
-    if (FAILED(hr)) return 0;
+    HRESULT created = device->CreateShaderResourceView(texture, nullptr, &view); device->Release();
+    if (FAILED(created) || !view) {
+        NeuralFxPublishRegistration(NFX_REG_STAGE_VIEW, NFX_REG_VIEW, created, camera, epoch, &desc, from_view, NeuralFxSlotsUsed());
+        texture->Release(); return 0;
+    }
     std::lock_guard<std::mutex> lock(nfx_inputs_lock);
     for (auto& slot : nfx_motion_slots) if (!slot.handle) {
         if (++nfx_next_handle == 0) ++nfx_next_handle;
-        texture->AddRef(); slot.handle = nfx_next_handle; slot.camera = camera; slot.epoch = epoch;
-        slot.texture = texture; slot.view = view; return slot.handle;
+        slot.handle = nfx_next_handle; slot.camera = camera; slot.epoch = epoch;
+        // La referencia de QueryInterface es la del hueco: no se suelta aquí.
+        slot.texture = texture; slot.view = view;
+        NeuralFxPublishRegistration(NFX_REG_STAGE_DONE, NFX_REG_OK, S_OK, camera, epoch, &desc, from_view, NeuralFxSlotsUsed());
+        return slot.handle;
     }
-    view->Release(); return 0;
+    NeuralFxPublishRegistration(NFX_REG_STAGE_SLOT, NFX_REG_SLOTS, S_OK, camera, epoch, &desc, from_view, NeuralFxSlotsUsed());
+    view->Release(); texture->Release(); return 0;
 }
 NFX_EXPORT int NFX_CALL NeuralFX_ReserveMotion(uint32_t handle) {
     std::lock_guard<std::mutex> lock(nfx_inputs_lock);

@@ -214,26 +214,30 @@ namespace NeuralFX.UI
             if (_showDetails) Set(_details, SessionViewState.Details(frame));
             Fit();
         }
-        // La cámara de CS1 no siempre ocupa el backbuffer, y cambia de alto durante la partida.
-        // Las guías —profundidad y movimiento— salen de la cámara y se muestrean sobre la imagen
-        // presentada, así que esa diferencia las estira en vertical. Con la escena quieta no se
-        // nota; al mover la cámara sí. Decirlo aquí evita volver a deducirlo desde los registros.
+        // La cámara de CS1 no ocupa todo el backbuffer: dibuja en una región de la pantalla.
+        //
+        // Esto SOLO informa de esa diferencia de tamaños. No dice que la imagen se estire ni que
+        // las guías estén desalineadas: para afirmar eso haría falta observar el recurso de
+        // origen y la operación de copia o muestreo, no restar dos alturas. Una versión anterior
+        // de este panel anunciaba "Guías estiradas 10,5 %" y era una deducción, no una medida.
         private static string DescribeGeometry(TelemetryFrame frame)
         {
             if (frame.RenderHeight <= 0 || frame.DisplayHeight <= 0) return "";
             if (frame.RenderWidth == frame.DisplayWidth && frame.RenderHeight == frame.DisplayHeight) return "";
-            float stretch = 100f * (frame.DisplayHeight - frame.RenderHeight) / frame.DisplayHeight;
-            return "Guías estiradas " + stretch.ToString("0.0") + "%: la cámara es " +
-                frame.RenderWidth + "x" + frame.RenderHeight + " sobre " +
-                frame.DisplayWidth + "x" + frame.DisplayHeight + ".\n";
+            return "Viewport de escena " + frame.RenderWidth + "x" + frame.RenderHeight +
+                " dentro de una salida " + frame.DisplayWidth + "x" + frame.DisplayHeight +
+                ". Correspondencia de guías: sin verificar.\n";
         }
         // Lo que costo tres sesiones de diagnostico averiguar, dicho donde se ve.
         private static string DescribeHealth(Rendering.NativeHealth health)
         {
             if (health.Size == 0) return "Este puente no publica salud del pipeline.";
             if (health.ProbeFrame == 0) return "Sondas: aun sin medir (la primera llega a los 600 frames).";
+            // Una muestra plana no distingue entre buffer equivocado, etapa de captura, copia
+            // incompleta, region leida o conversion. Se informa la observacion; la causa la
+            // decide el diagnostico, no este texto.
             if (health.DepthFlatMoving != 0)
-                return "Profundidad PLANA con la escena en movimiento: ReShade esta en el buffer equivocado (Add-ons -> Generic Depth).";
+                return "Profundidad plana en la ultima muestra, con la escena en movimiento. Origen sin identificar.";
             string depth = health.DepthFinitePct == 0 || health.DepthMax - health.DepthMin < 1e-6f
                 ? "profundidad plana"
                 : "profundidad " + health.DepthMin.ToString("0.###") + "-" + health.DepthMax.ToString("0.###");

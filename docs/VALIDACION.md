@@ -111,6 +111,41 @@ Lo verificado sobre la instalación, que sigue siendo válido como punto de part
 
 Para el registro de vectores de movimiento, la vía propuesta y no ejecutada es una sola recompilación nativa que haga dos cosas: pedir el tipo del puntero con `QueryInterface` en vez del `static_cast<ID3D11Texture2D*>` ciego de `Native/neuralfx_inputs.h` —Unity puede entregar ahí la vista y no el recurso, lo que explicaría un rechazo constante sin caída— y contar por separado los ocho motivos de rechazo. Ninguna de las dos se llegó a escribir.
 
+## Informe de registro nativo — 11 de septiembre de 2026
+
+`NeuralFX_RegisterMotion` devolvía 0 por once condiciones distintas sin decir cuál, y el descriptor real de la textura solo lo puede leer C++. Tres sesiones de ciudad terminaron sin identificar la causa. Ahora el registro publica **etapa, motivo único, HRESULT y el descriptor que llegó a leer**, y el mod lo transcribe al registro de sesión durante una partida normal, sin ningún paso del usuario.
+
+`Native/neuralfx_registration_report.h` define el informe con ancho fijo (144 B, `static_assert` en C++ y prueba de forma en C#). Motivos: puntero nulo, identidad inválida, sin `ID3D11Texture2D`, formato, multisample, mips, array, sin permiso de lectura, fallo de la vista, huecos agotados y extensión. **Ninguno comparte valor con otro**: agrupar causas en un solo cero fue exactamente el defecto.
+
+El `static_cast<ID3D11Texture2D*>` pasa a `QueryInterface`. La documentación de Unity 5.6 dice que `GetNativeTexturePtr` entrega un `ID3D11Resource` en D3D11; el cast ciego y el `GetDesc` posterior eran comportamiento indefinido si el objeto fuera otro, y además dejaban el motivo indistinguible. Si lo que llega es una vista, se pide su recurso: **es un contrato adicional declarado aquí, no una afirmación sobre lo que Unity entrega**, y así consta en las pruebas.
+
+### Correcciones de mensajes que afirmaban causas no demostradas
+
+| Antes | Ahora |
+|---|---|
+| «Guías estiradas 10,5 %» por restar dos alturas | «Viewport de escena 3840×1933 dentro de una salida 3840×2160. Correspondencia de guías: sin verificar.» |
+| «Profundidad PLANA: ReShade está en el buffer equivocado» | «Profundidad plana en la última muestra, con la escena en movimiento. Origen sin identificar.» |
+
+Un viewport parcial no demuestra que la imagen se estire: haría falta observar el recurso de origen y la operación de copia o muestreo. Una muestra plana no distingue entre búfer equivocado, etapa de captura, copia incompleta, región leída o conversión.
+
+### Verificación ejecutada
+
+| Nivel | Resultado |
+|---|---|
+| `Native/build.ps1` — contrato del puente | Correcto |
+| `Native/build.ps1` — fixture D3D11 WARP | Registro nominal, once rechazos con descriptor real, recurso desde vista y huecos agotados |
+| `Native/smoke.ps1` en carpeta sintética 3840×2160 | 1.714 presents, resultado `00000000`, 1.548 evaluaciones, sin error de dispositivo |
+| `dotnet test` | 79 casos, sin regresiones |
+| `tools/package.ps1 -Deploy` | Instalado con copia de seguridad; sin tocar partidas |
+
+El fixture WARP acredita **registro y transporte**, no NGX, ni Unity, ni la captura de CS1. La profundidad plana y los vectores en cero del fixture sintético son su escena vacía, no un defecto.
+
+Versión del feeder sincronizada a `0.15.1-neuralfx.7` en `Native/build.ps1` y en el catálogo del Hub, que se habían separado.
+
+### Lo que este corte no resuelve
+
+El motivo concreto del rechazo en CS1 **sigue sin conocerse**: se ha construido el instrumento, no se ha leído todavía la medida. La primera partida normal con el addon actualizado lo dejará escrito. Tampoco se ha tocado la profundidad, ni la geometría de origen/destino de los vectores, ni el aislamiento de la interfaz.
+
 ## Pendientes
 
 No se ha demostrado ausencia de ghosting, compatibilidad con todos los mods ni UI intacta. La profundidad de una ciudad **sí se midió, y no es correcta de forma sostenida**: ver la sección del 10 de septiembre. No se implementaron jitter de cámara ni DRS de Unity; el consumo de MV nativos está escrito, pero el puente rechaza la textura y la ruta no llega a ejercitarse. La consulta de publicaciones no instala versiones nuevas sin un catálogo compatible y verificado.

@@ -53,7 +53,16 @@ namespace NeuralFX.Rendering
                 System.IntPtr pointer = texture.GetNativeTexturePtr();
                 _handles[i] = bridge.RegisterMotion(pointer, camera, epoch);
                 if (_handles[i] == 0)
-                { Failure = "el puente rechazó la textura " + i + (pointer == System.IntPtr.Zero ? " (sin puntero nativo)" : " (aa=" + texture.antiAliasing + ")"); Release(); return false; }
+                {
+                    // El motivo lo sabe C++, que es quien leyó el descriptor. Aquí solo se
+                    // transcribe: un puente anterior no publica el informe y entonces lo único
+                    // honesto es decir que no se sabe.
+                    var report = bridge.ReadRegistrationReport();
+                    Failure = "el puente rechazó la textura " + i + ": " + (report.Size != 0
+                        ? report.Describe()
+                        : "este puente no publica el informe de registro; actualiza el addon nativo");
+                    Release(); return false;
+                }
             }
             _width = width; _height = height; _epoch = epoch; return true;
         }
