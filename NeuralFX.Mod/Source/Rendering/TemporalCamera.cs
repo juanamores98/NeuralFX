@@ -61,7 +61,7 @@ namespace NeuralFX.Rendering
                 else
                 {
                     motion = _inputs.Record(_event, width, height, x, y);
-                    MotionState = motion != 0 ? "enviado " + width + "x" + height + " en " + x + "," + y : "sin turno libre";
+                    MotionState = motion != 0 ? "enviado " + width + "x" + height + " en " + x + "," + y : "sin enviar: " + _inputs.Failure;
                 }
             }
             var frame = new NativeFrame {

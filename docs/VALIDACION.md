@@ -161,6 +161,25 @@ El mensaje del mod decía «se esperaba R16G16_FLOAT (10)». **10 es `R16G16B16A
 
 Feeder a `0.15.1-neuralfx.8`, en `Native/build.ps1` y en el catálogo a la vez.
 
+### El registro entra; ahora se atasca un paso después
+
+Con la familia tipeless aceptada, el registro deja de fallar. La sesión siguiente dice:
+
+```text
+movimiento=1 (Unity: sin turno libre)
+```
+
+`Record` reserva un turno por fotograma de entre tres, y el turno se devuelve cuando la GPU termina su trabajo. Si las devoluciones no ocurren, los tres se agotan y la ruta vuelve al descriptor óptico — otra vez en silencio. Y el mensaje mezclaba **dos** causas distintas: que la región no quepa en el destino, y que no quede ningún turno.
+
+Mismo remedio que con el registro, antes de proponer un arreglo:
+
+- Los dos motivos se separan en el mod. El primero dice ahora qué región no cabía y dónde.
+- El informe nativo sube a **versión 2** (160 B) con estado **vivo** de turnos: en vuelo ahora, concedidos, negados y devueltos. Se leen al consultar, no al registrar, porque lo que hay que saber es si las devoluciones avanzan **ahora**.
+
+Con eso, la siguiente sesión distingue sin ambigüedad entre «se conceden y nunca vuelven» —fuga en la vida útil— y «se conceden y vuelven, pero tres turnos no bastan para la latencia de la GPU» —profundidad de la reserva—. Son arreglos distintos y el segundo **no** se resuelve agrandando la tabla sin más.
+
+Feeder a `0.15.1-neuralfx.9`.
+
 ### Lo que este corte no resuelve
 
 Que el registro acepte el recurso **acredita transporte, no calidad de los vectores**. Sigue sin verificarse la geometría de origen y destino de la copia: se presupone que la textura de `BuiltinRenderTextureType.MotionVectors` mide lo que la cámara, y si midiera lo que la pantalla la copia quedaría desplazada. Tampoco están verificadas las unidades ni el signo del vector, que son magnitudes distintas de su colocación. Nada de esto se ha tocado aquí, y la próxima sesión solo puede demostrar que la ruta entra, no que sus datos sean correctos.

@@ -56,9 +56,17 @@ struct NeuralFxRegistrationReport {
     uint32_t from_view;           // 1 si hubo que pedir el recurso a una vista
     uint32_t slots_used, slots_total;
     uint32_t accepted, rejected;
+    // Version 2. Registrar el recurso es solo la mitad: cada frame hay que reservar un turno y
+    // alguien tiene que devolverlo cuando la GPU termina. Si las devoluciones no ocurren, los
+    // turnos se agotan y la ruta muere igual de callada que antes.
+    uint32_t reserved_now;        // turnos en vuelo ahora mismo
+    uint32_t reserve_ok;          // reservas concedidas desde el arranque
+    uint32_t reserve_denied;      // reservas negadas: el turno seguia ocupado
+    uint32_t completed;           // devoluciones por trabajo GPU terminado o cancelacion
     uint32_t counts[NFX_REG_REASON_COUNT];  // cuántas veces cada motivo, desde el arranque
 };
 #pragma pack(pop)
-static_assert(sizeof(NeuralFxRegistrationReport) == 144);
+static_assert(sizeof(NeuralFxRegistrationReport) == 160);
 static_assert(offsetof(NeuralFxRegistrationReport, reason) == 16);
-static_assert(offsetof(NeuralFxRegistrationReport, counts) == 96);
+static_assert(offsetof(NeuralFxRegistrationReport, reserved_now) == 96);
+static_assert(offsetof(NeuralFxRegistrationReport, counts) == 112);

@@ -73,8 +73,15 @@ namespace NeuralFX.Rendering
         /// </summary>
         public uint Record(CommandBuffer commands, int sourceWidth, int sourceHeight, int x, int y)
         {
-            if (sourceWidth <= 0 || sourceHeight <= 0) return 0;
-            if (x < 0 || y < 0 || x + sourceWidth > _width || y + sourceHeight > _height) return 0;
+            // Dos motivos distintos con el mismo cero era justo el defecto que costó tres
+            // sesiones en el registro. Aquí se separan desde el principio.
+            Failure = null;
+            if (sourceWidth <= 0 || sourceHeight <= 0 || x < 0 || y < 0 || x + sourceWidth > _width || y + sourceHeight > _height)
+            {
+                Failure = "la región " + sourceWidth + "x" + sourceHeight + " en " + x + "," + y +
+                    " no cabe en " + _width + "x" + _height;
+                return 0;
+            }
             for (int i = 0; i < 3; ++i) if (_handles[i] != 0 && _bridge.ReserveMotion(_handles[i]))
             {
                 // Executed AfterEverything, after this camera produced its inputs.
@@ -82,6 +89,10 @@ namespace NeuralFX.Rendering
                     new RenderTargetIdentifier(_textures[i]), 0, 0, x, y);
                 return _handles[i];
             }
+            // Ningún turno libre: los tres siguen en vuelo porque nadie los ha devuelto. El
+            // puente sabe si las devoluciones avanzan; aquí solo se transcribe.
+            var report = _bridge.ReadRegistrationReport();
+            Failure = report.Size != 0 ? report.DescribeSlots() : "sin turno libre y sin informe del puente";
             return 0; // GPU behind / unavailable: select the complete optical descriptor.
         }
         private bool _hardware;

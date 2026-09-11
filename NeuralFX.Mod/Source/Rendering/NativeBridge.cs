@@ -52,7 +52,14 @@ namespace NeuralFX.Rendering
         public uint MipLevels, ArraySize, SampleCount, SampleQuality;
         public uint BindFlags, MiscFlags, Usage, CpuAccess, FromView;
         public uint SlotsUsed, SlotsTotal, Accepted, Rejected;
+        public uint ReservedNow, ReserveOk, ReserveDenied, Completed;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 12)] public uint[] Counts;
+        /// <summary>Estado de los turnos: si las devoluciones no avanzan, la ruta se ahoga.</summary>
+        public string DescribeSlots()
+        {
+            return "turnos " + ReservedNow + " en vuelo de " + SlotsUsed + " registrados · concedidos " +
+                ReserveOk + " · negados " + ReserveDenied + " · devueltos " + Completed;
+        }
         /// <summary>El motivo en palabras. Es una observacion del recurso, no una causa aguas arriba.</summary>
         public string Describe()
         {
@@ -163,7 +170,7 @@ namespace NeuralFX.Rendering
             // que no hay informe, en vez de leer memoria con otra forma.
             var data = new NativeRegistrationReport();
             uint bytes = (uint)Marshal.SizeOf(typeof(NativeRegistrationReport));
-            return _registration != null && _registration(ref data, bytes) == 1 && data.Version == 1 ? data : new NativeRegistrationReport();
+            return _registration != null && _registration(ref data, bytes) == 1 && data.Version == 2 ? data : new NativeRegistrationReport();
         }
         public NativeResult ReadResult()
         {

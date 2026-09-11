@@ -2,6 +2,7 @@
 #pragma once
 #include "neuralfx_ngx.h"
 #include <d3d11.h>
+#include <atomic>
 #include "neuralfx_bridge.h"
 #include "neuralfx_registration_report.h"
 struct NeuralFxMotionSlot {
@@ -18,8 +19,9 @@ static void NeuralFxReleaseSlot(NeuralFxMotionSlot& slot) {
     if (slot.texture) slot.texture->Release();
     slot = {};
 }
+static std::atomic<uint32_t> nfx_reserve_ok{0}, nfx_reserve_denied{0}, nfx_motion_completed{0};
 static std::mutex nfx_report_lock;
-static NeuralFxRegistrationReport nfx_report = {sizeof(NeuralFxRegistrationReport), 1};
+static NeuralFxRegistrationReport nfx_report = {sizeof(NeuralFxRegistrationReport), 2};
 // El informe guarda el ÚLTIMO intento, y además cuenta cuántas veces ocurrió cada motivo. Lo
 // primero sirve para diagnosticar; lo segundo, para no confundir un tropiezo aislado con un
 // rechazo sistemático, que es una distinción que el registro de sesión no podía hacer.
@@ -27,7 +29,7 @@ static void NeuralFxPublishRegistration(uint32_t stage, uint32_t reason, HRESULT
     uint32_t camera, uint32_t epoch, const D3D11_TEXTURE2D_DESC* desc, bool from_view, uint32_t used) {
     std::lock_guard<std::mutex> lock(nfx_report_lock);
     NeuralFxRegistrationReport next = {};
-    next.size = sizeof(next); next.version = 1;
+    next.size = sizeof(next); next.version = 2;
     next.request_serial = nfx_report.request_serial + 1;
     next.stage = stage; next.reason = reason; next.hresult = static_cast<int32_t>(hr);
     next.camera = camera; next.epoch = epoch; next.from_view = from_view ? 1u : 0u;
@@ -48,8 +50,22 @@ static void NeuralFxPublishRegistration(uint32_t stage, uint32_t reason, HRESULT
 /// <summary>Último intento de registro, con su descriptor real. Nunca bloquea al render.</summary>
 NFX_EXPORT int NFX_CALL NeuralFX_GetRegistrationReport(NeuralFxRegistrationReport* out, uint32_t bytes) {
     if (!out || bytes != sizeof(NeuralFxRegistrationReport)) return 0;
-    std::lock_guard<std::mutex> lock(nfx_report_lock);
-    *out = nfx_report; return 1;
+    {
+        std::lock_guard<std::mutex> lock(nfx_report_lock);
+        *out = nfx_report;
+    }
+    // El registro es historia; los turnos son estado vivo. Se leen al consultar, no al
+    // registrar, porque lo que interesa saber es si se estan devolviendo AHORA.
+    out->reserve_ok = nfx_reserve_ok.load();
+    out->reserve_denied = nfx_reserve_denied.load();
+    out->completed = nfx_motion_completed.load();
+    uint32_t reserved = 0, used = 0;
+    {
+        std::lock_guard<std::mutex> lock(nfx_inputs_lock);
+        for (const auto& slot : nfx_motion_slots) { if (slot.handle) ++used; if (slot.reserved) ++reserved; }
+    }
+    out->reserved_now = reserved; out->slots_used = used;
+    return 1;
 }
 static uint32_t NeuralFxSlotsUsed() {
     uint32_t used = 0;
@@ -128,12 +144,14 @@ NFX_EXPORT uint32_t NFX_CALL NeuralFX_RegisterMotion(void* pointer, uint32_t cam
 }
 NFX_EXPORT int NFX_CALL NeuralFX_ReserveMotion(uint32_t handle) {
     std::lock_guard<std::mutex> lock(nfx_inputs_lock);
-    for (auto& slot : nfx_motion_slots) if (slot.handle == handle && handle && !slot.reserved && !slot.retiring) { slot.reserved = true; return 1; }
+    for (auto& slot : nfx_motion_slots) if (slot.handle == handle && handle && !slot.reserved && !slot.retiring) { slot.reserved = true; ++nfx_reserve_ok; return 1; }
+    ++nfx_reserve_denied;
     return 0;
 }
 static void NeuralFxMotionComplete(uint32_t handle) {
     std::lock_guard<std::mutex> lock(nfx_inputs_lock);
     for (auto& slot : nfx_motion_slots) if (handle && slot.handle == handle) {
+        if (slot.reserved) ++nfx_motion_completed;
         slot.reserved = false; if (slot.retiring) NeuralFxReleaseSlot(slot); return;
     }
 }

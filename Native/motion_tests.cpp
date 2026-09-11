@@ -45,7 +45,7 @@ static ID3D11Texture2D* Shaped(ID3D11Device* device, DXGI_FORMAT format, UINT mi
 static NeuralFxRegistrationReport Report() {
     NeuralFxRegistrationReport report={};
     assert(NeuralFX_GetRegistrationReport(&report,sizeof(report))==1);
-    assert(report.size==sizeof(report)&&report.version==1);
+    assert(report.size==sizeof(report)&&report.version==2);
     return report;
 }
 // Recorre el registro real, no un doble que siempre acepta. Un cero debe llevar SIEMPRE un
@@ -118,6 +118,20 @@ static void Registration(ID3D11Device* device) {
     auto full=Report();assert(full.reason==NFX_REG_SLOTS&&full.stage==NFX_REG_STAGE_SLOT&&full.slots_used==16);
     for(int i=0;i<16;i++) NeuralFX_ReleaseMotion(held[i]);
     assert(Report().counts[NFX_REG_OK]>=17&&Report().rejected>=8);
+
+    // Los turnos son estado vivo, no historia: una reserva concedida sube el contador y deja
+    // uno en vuelo; la devolucion lo baja. Sin esto, un turno que nunca vuelve es invisible.
+    handle=NeuralFX_RegisterMotion(good,7,3);assert(handle);
+    auto before=Report();
+    assert(NeuralFX_ReserveMotion(handle));
+    auto busy=Report();
+    assert(busy.reserved_now==before.reserved_now+1&&busy.reserve_ok==before.reserve_ok+1);
+    assert(!NeuralFX_ReserveMotion(handle)); // el mismo turno no se concede dos veces
+    assert(Report().reserve_denied==before.reserve_denied+1);
+    NeuralFX_CancelMotion(handle);
+    auto freed=Report();
+    assert(freed.reserved_now==before.reserved_now&&freed.completed==before.completed+1);
+    NeuralFX_ReleaseMotion(handle);
     good->Release();
 }
 int main(){

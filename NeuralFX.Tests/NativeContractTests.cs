@@ -44,6 +44,7 @@ public class NativeContractTests
         public uint MipLevels, ArraySize, SampleCount, SampleQuality;
         public uint BindFlags, MiscFlags, Usage, CpuAccess, FromView;
         public uint SlotsUsed, SlotsTotal, Accepted, Rejected;
+        public uint ReservedNow, ReserveOk, ReserveDenied, Completed;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 12)] public uint[] Counts;
     }
 
