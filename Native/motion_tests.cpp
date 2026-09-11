@@ -46,7 +46,7 @@ static ID3D11Texture2D* Shaped(ID3D11Device* device, DXGI_FORMAT format, UINT mi
 static NeuralFxRegistrationReport Report() {
     NeuralFxRegistrationReport report={};
     assert(NeuralFX_GetRegistrationReport(&report,sizeof(report))==1);
-    assert(report.size==sizeof(report)&&report.version==4);
+    assert(report.size==sizeof(report)&&report.version==5);
     return report;
 }
 // Recorre el registro real, no un doble que siempre acepta. Un cero debe llevar SIEMPRE un
@@ -166,7 +166,10 @@ static void Registration(ID3D11Device* device) {
     assert(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&other,nullptr,&otherContext)));
     { NeuralFxSelectedMotion foreign;assert(foreign.Select(other,shaped,sized,opticalView,1,1));assert(foreign.provider==1u); }
     auto crossed=Report();
+    // La comprobacion nueva no se vuelve permisiva: ante un dispositivo ajeno de verdad, el
+    // consumidor no consigue crear su vista y el HRESULT queda anotado.
     assert(crossed.select_reason==NFX_SEL_DEVICE&&crossed.select_device_match==0);
+    assert(FAILED(crossed.select_probe_hresult));
     otherContext->Release();other->Release();
     NeuralFX_ReleaseMotion(live);opticalView->Release();sized->Release();
     good->Release();

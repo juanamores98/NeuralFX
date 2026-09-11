@@ -55,7 +55,9 @@ namespace NeuralFX.Rendering
         public uint ReservedNow, ReserveOk, ReserveDenied, Completed;
         public uint SelectReason, SelectNative, SelectFallback;
         public uint SelectFrameWidth, SelectFrameHeight, SelectSlotWidth, SelectSlotHeight, SelectIdentity;
-        public uint SelectDeviceMatch, SelectOwnerLuidLow, SelectDeviceLuidLow;
+        public uint SelectDeviceMatch;
+        public int SelectProbeHResult;
+        public uint SelectOwnerLuidLow, SelectDeviceLuidLow;
         public int SelectOwnerLuidHigh, SelectDeviceLuidHigh;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 12)] public uint[] Counts;
         /// <summary>Estado de los turnos: si las devoluciones no avanzan, la ruta se ahoga.</summary>
@@ -76,17 +78,21 @@ namespace NeuralFX.Rendering
                 case 3: why = "el hueco no estaba reservado"; break;
                 case 4: why = "el hueco es de otra camara"; break;
                 case 5: why = "el hueco es de otra epoca"; break;
-                case 6: why = "otro dispositivo D3D11: adaptador del recurso " +
-                    SelectOwnerLuidHigh.ToString("X") + ":" + SelectOwnerLuidLow.ToString("X") +
-                    ", del consumidor " + SelectDeviceLuidHigh.ToString("X") + ":" + SelectDeviceLuidLow.ToString("X") +
+                // El LUID solo descarta que sean GPU distintas; no distingue una envoltura de un
+                // segundo dispositivo. Quien lo distingue es la prueba: si el consumidor no pudo
+                // crear su propia vista del recurso, es que de verdad no puede leerlo.
+                case 6: why = "el consumidor no pudo leer el recurso (HRESULT 0x" + SelectProbeHResult.ToString("X8") + ")" +
                     (SelectOwnerLuidLow == SelectDeviceLuidLow && SelectOwnerLuidHigh == SelectDeviceLuidHigh
-                        ? " (mismo adaptador: son dos dispositivos, no dos GPU)" : " (adaptadores distintos)"); break;
+                        ? "; mismo adaptador " : "; adaptadores distintos ") +
+                    SelectOwnerLuidHigh.ToString("X") + ":" + SelectOwnerLuidLow.ToString("X") + " frente a " +
+                    SelectDeviceLuidHigh.ToString("X") + ":" + SelectDeviceLuidLow.ToString("X"); break;
                 case 7: why = "la vista no apunta a su textura"; break;
                 case 8: why = "el recurso mide " + SelectSlotWidth + "x" + SelectSlotHeight +
                     " y el frame declara " + SelectFrameWidth + "x" + SelectFrameHeight; break;
                 default: why = "motivo " + SelectReason; break;
             }
-            string how = SelectDeviceMatch == 1 ? "" : SelectDeviceMatch == 2 ? " · identidad por DXGI" : "";
+            string how = SelectDeviceMatch == 2 ? " · identidad por DXGI"
+                : SelectDeviceMatch == 3 ? " · vista prestada al consumidor" : "";
             return "seleccion: " + why + how + " · nativos " + SelectNative + " · al optico " + SelectFallback;
         }
         /// <summary>El motivo en palabras. Es una observacion del recurso, no una causa aguas arriba.</summary>
@@ -199,7 +205,7 @@ namespace NeuralFX.Rendering
             // que no hay informe, en vez de leer memoria con otra forma.
             var data = new NativeRegistrationReport();
             uint bytes = (uint)Marshal.SizeOf(typeof(NativeRegistrationReport));
-            return _registration != null && _registration(ref data, bytes) == 1 && data.Version == 4 ? data : new NativeRegistrationReport();
+            return _registration != null && _registration(ref data, bytes) == 1 && data.Version == 5 ? data : new NativeRegistrationReport();
         }
         public NativeResult ReadResult()
         {

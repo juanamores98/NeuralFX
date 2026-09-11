@@ -11,11 +11,17 @@ struct NeuralFxMotionSlot {
     ID3D11Texture2D* texture = nullptr;
     ID3D11ShaderResourceView* view = nullptr;
     bool reserved = false, retiring = false;
+    // Vista creada por el dispositivo que consume, cuando no es el que creo el recurso. Se
+    // intenta una sola vez por hueco: o ese dispositivo puede leer el recurso, o no puede.
+    ID3D11Device* probed = nullptr;
+    ID3D11ShaderResourceView* probed_view = nullptr;
+    HRESULT probed_result = S_OK;
 };
 static std::mutex nfx_inputs_lock;
 static NeuralFxMotionSlot nfx_motion_slots[16];
 static uint32_t nfx_next_handle = 0;
 static void NeuralFxReleaseSlot(NeuralFxMotionSlot& slot) {
+    if (slot.probed_view) slot.probed_view->Release();
     if (slot.view) slot.view->Release();
     if (slot.texture) slot.texture->Release();
     slot = {};
@@ -27,7 +33,7 @@ static std::atomic<uint32_t> nfx_reserve_ok{0}, nfx_reserve_denied{0}, nfx_motio
 static std::atomic<uint32_t> nfx_select_reason{NFX_SEL_NO_HANDLE}, nfx_select_native{0}, nfx_select_fallback{0};
 static std::atomic<uint32_t> nfx_select_fw{0}, nfx_select_fh{0}, nfx_select_sw{0}, nfx_select_sh{0}, nfx_select_id{0};
 static std::atomic<uint32_t> nfx_select_match{0}, nfx_owner_luid_low{0}, nfx_device_luid_low{0};
-static std::atomic<int32_t> nfx_owner_luid_high{0}, nfx_device_luid_high{0};
+static std::atomic<int32_t> nfx_owner_luid_high{0}, nfx_device_luid_high{0}, nfx_select_probe{0};
 // Identidad real del dispositivo, no identidad de puntero. ReShade envuelve ID3D11Device: el
 // recurso declara el dispositivo real y el contexto del addon puede entregar la envoltura, asi
 // que comparar punteros da un falso negativo. Se pregunta ademas por el objeto DXGI, que la
@@ -53,7 +59,7 @@ static uint32_t NeuralFxDeviceMatch(ID3D11Device* owner, ID3D11Device* consumer,
     return match;
 }
 static std::mutex nfx_report_lock;
-static NeuralFxRegistrationReport nfx_report = {sizeof(NeuralFxRegistrationReport), 4};
+static NeuralFxRegistrationReport nfx_report = {sizeof(NeuralFxRegistrationReport), 5};
 // El informe guarda el ÚLTIMO intento, y además cuenta cuántas veces ocurrió cada motivo. Lo
 // primero sirve para diagnosticar; lo segundo, para no confundir un tropiezo aislado con un
 // rechazo sistemático, que es una distinción que el registro de sesión no podía hacer.
@@ -61,7 +67,7 @@ static void NeuralFxPublishRegistration(uint32_t stage, uint32_t reason, HRESULT
     uint32_t camera, uint32_t epoch, const D3D11_TEXTURE2D_DESC* desc, bool from_view, uint32_t used) {
     std::lock_guard<std::mutex> lock(nfx_report_lock);
     NeuralFxRegistrationReport next = {};
-    next.size = sizeof(next); next.version = 4;
+    next.size = sizeof(next); next.version = 5;
     next.request_serial = nfx_report.request_serial + 1;
     next.stage = stage; next.reason = reason; next.hresult = static_cast<int32_t>(hr);
     next.camera = camera; next.epoch = epoch; next.from_view = from_view ? 1u : 0u;
@@ -108,6 +114,7 @@ NFX_EXPORT int NFX_CALL NeuralFX_GetRegistrationReport(NeuralFxRegistrationRepor
     out->select_owner_luid_high = nfx_owner_luid_high.load();
     out->select_device_luid_low = nfx_device_luid_low.load();
     out->select_device_luid_high = nfx_device_luid_high.load();
+    out->select_probe_hresult = nfx_select_probe.load();
     return 1;
 }
 static uint32_t NeuralFxSlotsUsed() {
@@ -221,7 +228,7 @@ struct NeuralFxSelectedMotion {
         // habia forma de saber cual de las cinco habia fallado.
         uint32_t reason = frame.motion_handle ? NFX_SEL_UNKNOWN_HANDLE : NFX_SEL_NO_HANDLE;
         uint32_t identity = 0, slot_width = 0, slot_height = 0, match = 0, owner_low = 0, device_low = 0;
-        int32_t owner_high = 0, device_high = 0;
+        int32_t owner_high = 0, device_high = 0; HRESULT probe = S_OK;
         {
             std::lock_guard<std::mutex> lock(nfx_inputs_lock);
             for (auto& slot : nfx_motion_slots) {
@@ -235,8 +242,30 @@ struct NeuralFxSelectedMotion {
                 match = NeuralFxDeviceMatch(owner, device, owner_luid, device_luid);
                 owner_low = owner_luid.LowPart; owner_high = owner_luid.HighPart;
                 device_low = device_luid.LowPart; device_high = device_luid.HighPart;
-                bool same_device = match != 0; owner->Release();
-                ID3D11Resource* viewed = nullptr; slot.view->GetResource(&viewed);
+                owner->Release();
+                // Ni el puntero ni la identidad DXGI zanjan la pregunta: ReShade envuelve
+                // ID3D11Device y puede envolver tambien su objeto DXGI, asi que «no coincide» no
+                // significa «no sirve». Lo que decide no es la identidad sino la capacidad, y eso
+                // se pregunta pidiendole al consumidor que cree su propia vista del recurso. Una
+                // sola vez por hueco: si fuese de otro dispositivo de verdad, falla, y entonces
+                // el HRESULT lo dice en vez de dejarnos otra ronda de deducciones.
+                ID3D11ShaderResourceView* usable = slot.view;
+                if (match == 0) {
+                    if (slot.probed != device) {
+                        if (slot.probed_view) { slot.probed_view->Release(); slot.probed_view = nullptr; }
+                        D3D11_SHADER_RESOURCE_VIEW_DESC borrowed = {};
+                        borrowed.Format = DXGI_FORMAT_R16G16_FLOAT;
+                        borrowed.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+                        borrowed.Texture2D.MostDetailedMip = 0; borrowed.Texture2D.MipLevels = 1;
+                        slot.probed = device;
+                        slot.probed_result = device->CreateShaderResourceView(slot.texture, &borrowed, &slot.probed_view);
+                        if (FAILED(slot.probed_result)) slot.probed_view = nullptr;
+                    }
+                    probe = slot.probed_result;
+                    if (slot.probed_view) { usable = slot.probed_view; match = 3; }
+                }
+                bool same_device = match != 0;
+                ID3D11Resource* viewed = nullptr; usable->GetResource(&viewed);
                 bool same_view = viewed == slot.texture; viewed->Release();
                 if (!slot.reserved) reason = NFX_SEL_NOT_RESERVED;
                 else if (identity & 1) reason = NFX_SEL_CAMERA;
@@ -245,7 +274,7 @@ struct NeuralFxSelectedMotion {
                 else if (!same_view) reason = NFX_SEL_VIEW;
                 else if (candidate.Width != frame.width || candidate.Height != frame.height) reason = NFX_SEL_EXTENT;
                 else {
-                    texture->Release(); view->Release(); texture = slot.texture; view = slot.view;
+                    texture->Release(); view->Release(); texture = slot.texture; view = usable;
                     texture->AddRef(); view->AddRef();
                     desc = candidate; scale_x = frame.mv_scale_x; scale_y = frame.mv_scale_y;
                     provider = 2; reason = NFX_SEL_USED;
@@ -258,7 +287,7 @@ struct NeuralFxSelectedMotion {
             nfx_select_fw.store(frame.width); nfx_select_fh.store(frame.height);
             nfx_select_sw.store(slot_width); nfx_select_sh.store(slot_height);
             nfx_select_id.store(identity);
-            nfx_select_match.store(match);
+            nfx_select_match.store(match); nfx_select_probe.store(static_cast<int32_t>(probe));
             nfx_owner_luid_low.store(owner_low); nfx_owner_luid_high.store(owner_high);
             nfx_device_luid_low.store(device_low); nfx_device_luid_high.store(device_high);
             if (reason == NFX_SEL_USED) ++nfx_select_native; else ++nfx_select_fallback;

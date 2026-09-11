@@ -89,15 +89,16 @@ struct NeuralFxRegistrationReport {
     // envuelve ID3D11Device, y el recurso declara el real. Se registra como se establecio la
     // identidad, y los LUID de ambos adaptadores para poder distinguir "mismo aparato detras de
     // una envoltura" de "dos dispositivos de verdad".
-    uint32_t select_device_match;    // 0 ninguna, 1 mismo puntero, 2 misma identidad DXGI
+    uint32_t select_device_match;    // 0 ninguna, 1 mismo puntero, 2 identidad DXGI, 3 el consumidor pudo crear su vista
+    int32_t  select_probe_hresult;   // resultado de esa prueba; 0 si no hizo falta
     uint32_t select_owner_luid_low, select_device_luid_low;
     int32_t  select_owner_luid_high, select_device_luid_high;
     uint32_t counts[NFX_REG_REASON_COUNT];  // cuántas veces cada motivo, desde el arranque
 };
 #pragma pack(pop)
-static_assert(sizeof(NeuralFxRegistrationReport) == 212);
+static_assert(sizeof(NeuralFxRegistrationReport) == 216);
 static_assert(offsetof(NeuralFxRegistrationReport, reason) == 16);
 static_assert(offsetof(NeuralFxRegistrationReport, reserved_now) == 96);
 static_assert(offsetof(NeuralFxRegistrationReport, select_reason) == 112);
 static_assert(offsetof(NeuralFxRegistrationReport, select_device_match) == 144);
-static_assert(offsetof(NeuralFxRegistrationReport, counts) == 164);
+static_assert(offsetof(NeuralFxRegistrationReport, counts) == 168);

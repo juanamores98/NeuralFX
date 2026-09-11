@@ -47,7 +47,9 @@ public class NativeContractTests
         public uint ReservedNow, ReserveOk, ReserveDenied, Completed;
         public uint SelectReason, SelectNative, SelectFallback;
         public uint SelectFrameWidth, SelectFrameHeight, SelectSlotWidth, SelectSlotHeight, SelectIdentity;
-        public uint SelectDeviceMatch, SelectOwnerLuidLow, SelectDeviceLuidLow;
+        public uint SelectDeviceMatch;
+        public int SelectProbeHResult;
+        public uint SelectOwnerLuidLow, SelectDeviceLuidLow;
         public int SelectOwnerLuidHigh, SelectDeviceLuidHigh;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 12)] public uint[] Counts;
     }
