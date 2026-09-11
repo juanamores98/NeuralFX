@@ -204,6 +204,22 @@ Informe a **versión 3** (192 B). El fixture WARP ejercita las seis rutas del se
 
 Feeder a `0.15.1-neuralfx.10`.
 
+### El selector descarta por dispositivo
+
+```text
+[seleccion: el recurso vive en otro dispositivo D3D11 · nativos 0 · al optico 2660]
+```
+
+37 de 38 muestras, sin una sola excepción. La comparación era `owner == device` sobre punteros crudos, y **eso no prueba nada**: ReShade envuelve `ID3D11Device`, de modo que el contexto del add-on puede entregar la envoltura mientras el recurso declara el dispositivo real. Dos punteros distintos pueden ser el mismo aparato.
+
+La identidad pasa a establecerse por el objeto DXGI, que la envoltura reenvía al real, y se anota **cómo** se estableció (mismo puntero, identidad DXGI, o ninguna) junto al **LUID del adaptador de los dos**. Si esto era una envoltura, la ruta entra. Si no lo era, el registro dirá si los dos LUID coinciden —dos dispositivos sobre la misma GPU, que exigiría recursos compartidos— o difieren.
+
+No se afirma cuál de los dos es: el informe lo dirá. Lo que sí se corrige sin esperar es la comprobación, que era inválida en cualquier caso.
+
+Informe a **versión 4** (212 B). El fixture crea un segundo dispositivo WARP real y comprueba que ahí el motivo **sí** es el dispositivo, con coincidencia 0.
+
+Feeder a `0.15.1-neuralfx.11`.
+
 ### El despliegue deja de pedir un clic
 
 `tools/package.ps1 -Deploy` instalaba mod y Hub, pero el addon nativo de la carpeta del juego lo escribía solo el botón **Aplicar preset / reinstalar**. Tres entregas seguidas terminaron pidiéndole eso al usuario. `tools/NeuralFX.PipelineInstall` lo hace ahora por el **mismo motor transaccional** que el botón —no copiando archivos, que dejaría el manifiesto mintiendo—, respetando el ejecutable y el preset guardados, negándose si CS1 está abierto, y **verificando por hash lo que quedó escrito**. `-Deploy` lo invoca solo si el addon instalado no coincide con el construido.

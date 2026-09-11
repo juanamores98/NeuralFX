@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cstdio>
 #pragma comment(lib,"d3d11.lib")
+#pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"d3dcompiler.lib")
 static ID3D11Texture2D* Texture(ID3D11Device* device, UINT width, UINT height, uint16_t x, uint16_t y) {
     D3D11_TEXTURE2D_DESC d={};d.Width=width;d.Height=height;d.MipLevels=1;d.ArraySize=1;d.Format=DXGI_FORMAT_R16G16_FLOAT;d.SampleDesc.Count=1;d.BindFlags=D3D11_BIND_SHADER_RESOURCE;
@@ -45,7 +46,7 @@ static ID3D11Texture2D* Shaped(ID3D11Device* device, DXGI_FORMAT format, UINT mi
 static NeuralFxRegistrationReport Report() {
     NeuralFxRegistrationReport report={};
     assert(NeuralFX_GetRegistrationReport(&report,sizeof(report))==1);
-    assert(report.size==sizeof(report)&&report.version==3);
+    assert(report.size==sizeof(report)&&report.version==4);
     return report;
 }
 // Recorre el registro real, no un doble que siempre acepta. Un cero debe llevar SIEMPRE un
@@ -158,6 +159,15 @@ static void Registration(ID3D11Device* device) {
         if(pick.reason==NFX_SEL_EXTENT) assert(seen.select_slot_width==257&&seen.select_frame_width==256);
     }
     assert(Report().select_native>=1&&Report().select_fallback>=4);
+    // Identidad de dispositivo: el mismo puntero da coincidencia 1 y anota su LUID. Un segundo
+    // dispositivo WARP de verdad no coincide, y entonces el motivo SI es el dispositivo.
+    assert(Report().select_device_match==1);
+    ID3D11Device* other=nullptr;ID3D11DeviceContext* otherContext=nullptr;
+    assert(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&other,nullptr,&otherContext)));
+    { NeuralFxSelectedMotion foreign;assert(foreign.Select(other,shaped,sized,opticalView,1,1));assert(foreign.provider==1u); }
+    auto crossed=Report();
+    assert(crossed.select_reason==NFX_SEL_DEVICE&&crossed.select_device_match==0);
+    otherContext->Release();other->Release();
     NeuralFX_ReleaseMotion(live);opticalView->Release();sized->Release();
     good->Release();
 }

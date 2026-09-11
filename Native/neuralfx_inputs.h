@@ -3,6 +3,7 @@
 #include "neuralfx_ngx.h"
 #include <d3d11.h>
 #include <atomic>
+#include <dxgi.h>
 #include "neuralfx_bridge.h"
 #include "neuralfx_registration_report.h"
 struct NeuralFxMotionSlot {
@@ -25,8 +26,34 @@ static std::atomic<uint32_t> nfx_reserve_ok{0}, nfx_reserve_denied{0}, nfx_motio
 // precio aceptable por no meter un candado ahi.
 static std::atomic<uint32_t> nfx_select_reason{NFX_SEL_NO_HANDLE}, nfx_select_native{0}, nfx_select_fallback{0};
 static std::atomic<uint32_t> nfx_select_fw{0}, nfx_select_fh{0}, nfx_select_sw{0}, nfx_select_sh{0}, nfx_select_id{0};
+static std::atomic<uint32_t> nfx_select_match{0}, nfx_owner_luid_low{0}, nfx_device_luid_low{0};
+static std::atomic<int32_t> nfx_owner_luid_high{0}, nfx_device_luid_high{0};
+// Identidad real del dispositivo, no identidad de puntero. ReShade envuelve ID3D11Device: el
+// recurso declara el dispositivo real y el contexto del addon puede entregar la envoltura, asi
+// que comparar punteros da un falso negativo. Se pregunta ademas por el objeto DXGI, que la
+// envoltura reenvia al real, y se anota el LUID del adaptador de cada uno como evidencia.
+static uint32_t NeuralFxDeviceMatch(ID3D11Device* owner, ID3D11Device* consumer, LUID& owner_luid, LUID& consumer_luid) {
+    owner_luid = {}; consumer_luid = {};
+    auto Describe = [](ID3D11Device* device, LUID& luid) -> IDXGIDevice* {
+        IDXGIDevice* dxgi = nullptr;
+        if (!device || FAILED(device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&dxgi))) || !dxgi) return nullptr;
+        IDXGIAdapter* adapter = nullptr;
+        if (SUCCEEDED(dxgi->GetAdapter(&adapter)) && adapter) {
+            DXGI_ADAPTER_DESC desc = {};
+            if (SUCCEEDED(adapter->GetDesc(&desc))) luid = desc.AdapterLuid;
+            adapter->Release();
+        }
+        return dxgi;
+    };
+    IDXGIDevice* a = Describe(owner, owner_luid);
+    IDXGIDevice* b = Describe(consumer, consumer_luid);
+    uint32_t match = owner == consumer ? 1u : (a && b && a == b ? 2u : 0u);
+    if (a) a->Release();
+    if (b) b->Release();
+    return match;
+}
 static std::mutex nfx_report_lock;
-static NeuralFxRegistrationReport nfx_report = {sizeof(NeuralFxRegistrationReport), 3};
+static NeuralFxRegistrationReport nfx_report = {sizeof(NeuralFxRegistrationReport), 4};
 // El informe guarda el ÚLTIMO intento, y además cuenta cuántas veces ocurrió cada motivo. Lo
 // primero sirve para diagnosticar; lo segundo, para no confundir un tropiezo aislado con un
 // rechazo sistemático, que es una distinción que el registro de sesión no podía hacer.
@@ -34,7 +61,7 @@ static void NeuralFxPublishRegistration(uint32_t stage, uint32_t reason, HRESULT
     uint32_t camera, uint32_t epoch, const D3D11_TEXTURE2D_DESC* desc, bool from_view, uint32_t used) {
     std::lock_guard<std::mutex> lock(nfx_report_lock);
     NeuralFxRegistrationReport next = {};
-    next.size = sizeof(next); next.version = 3;
+    next.size = sizeof(next); next.version = 4;
     next.request_serial = nfx_report.request_serial + 1;
     next.stage = stage; next.reason = reason; next.hresult = static_cast<int32_t>(hr);
     next.camera = camera; next.epoch = epoch; next.from_view = from_view ? 1u : 0u;
@@ -76,6 +103,11 @@ NFX_EXPORT int NFX_CALL NeuralFX_GetRegistrationReport(NeuralFxRegistrationRepor
     out->select_frame_width = nfx_select_fw.load(); out->select_frame_height = nfx_select_fh.load();
     out->select_slot_width = nfx_select_sw.load(); out->select_slot_height = nfx_select_sh.load();
     out->select_identity = nfx_select_id.load();
+    out->select_device_match = nfx_select_match.load();
+    out->select_owner_luid_low = nfx_owner_luid_low.load();
+    out->select_owner_luid_high = nfx_owner_luid_high.load();
+    out->select_device_luid_low = nfx_device_luid_low.load();
+    out->select_device_luid_high = nfx_device_luid_high.load();
     return 1;
 }
 static uint32_t NeuralFxSlotsUsed() {
@@ -188,7 +220,8 @@ struct NeuralFxSelectedMotion {
         // version anterior las juntaba todas en el filtro del bucle: cuando no encajaba, no
         // habia forma de saber cual de las cinco habia fallado.
         uint32_t reason = frame.motion_handle ? NFX_SEL_UNKNOWN_HANDLE : NFX_SEL_NO_HANDLE;
-        uint32_t identity = 0, slot_width = 0, slot_height = 0;
+        uint32_t identity = 0, slot_width = 0, slot_height = 0, match = 0, owner_low = 0, device_low = 0;
+        int32_t owner_high = 0, device_high = 0;
         {
             std::lock_guard<std::mutex> lock(nfx_inputs_lock);
             for (auto& slot : nfx_motion_slots) {
@@ -198,7 +231,11 @@ struct NeuralFxSelectedMotion {
                 D3D11_TEXTURE2D_DESC candidate; slot.texture->GetDesc(&candidate);
                 slot_width = candidate.Width; slot_height = candidate.Height;
                 ID3D11Device* owner = nullptr; slot.texture->GetDevice(&owner);
-                bool same_device = owner == device; owner->Release();
+                LUID owner_luid = {}, device_luid = {};
+                match = NeuralFxDeviceMatch(owner, device, owner_luid, device_luid);
+                owner_low = owner_luid.LowPart; owner_high = owner_luid.HighPart;
+                device_low = device_luid.LowPart; device_high = device_luid.HighPart;
+                bool same_device = match != 0; owner->Release();
                 ID3D11Resource* viewed = nullptr; slot.view->GetResource(&viewed);
                 bool same_view = viewed == slot.texture; viewed->Release();
                 if (!slot.reserved) reason = NFX_SEL_NOT_RESERVED;
@@ -221,6 +258,9 @@ struct NeuralFxSelectedMotion {
             nfx_select_fw.store(frame.width); nfx_select_fh.store(frame.height);
             nfx_select_sw.store(slot_width); nfx_select_sh.store(slot_height);
             nfx_select_id.store(identity);
+            nfx_select_match.store(match);
+            nfx_owner_luid_low.store(owner_low); nfx_owner_luid_high.store(owner_high);
+            nfx_device_luid_low.store(device_low); nfx_device_luid_high.store(device_high);
             if (reason == NFX_SEL_USED) ++nfx_select_native; else ++nfx_select_fallback;
         }
         return NeuralFxFinite(scale_x) && NeuralFxFinite(scale_y);

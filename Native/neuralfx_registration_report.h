@@ -85,11 +85,19 @@ struct NeuralFxRegistrationReport {
     uint32_t select_frame_width, select_frame_height;   // lo que el frame declaraba
     uint32_t select_slot_width, select_slot_height;     // lo que el recurso media
     uint32_t select_identity;        // bit 1 camara distinta, bit 2 epoca distinta
+    // Version 4. Un puntero de dispositivo distinto NO prueba que sea otro dispositivo: ReShade
+    // envuelve ID3D11Device, y el recurso declara el real. Se registra como se establecio la
+    // identidad, y los LUID de ambos adaptadores para poder distinguir "mismo aparato detras de
+    // una envoltura" de "dos dispositivos de verdad".
+    uint32_t select_device_match;    // 0 ninguna, 1 mismo puntero, 2 misma identidad DXGI
+    uint32_t select_owner_luid_low, select_device_luid_low;
+    int32_t  select_owner_luid_high, select_device_luid_high;
     uint32_t counts[NFX_REG_REASON_COUNT];  // cuántas veces cada motivo, desde el arranque
 };
 #pragma pack(pop)
-static_assert(sizeof(NeuralFxRegistrationReport) == 192);
+static_assert(sizeof(NeuralFxRegistrationReport) == 212);
 static_assert(offsetof(NeuralFxRegistrationReport, reason) == 16);
 static_assert(offsetof(NeuralFxRegistrationReport, reserved_now) == 96);
 static_assert(offsetof(NeuralFxRegistrationReport, select_reason) == 112);
-static_assert(offsetof(NeuralFxRegistrationReport, counts) == 144);
+static_assert(offsetof(NeuralFxRegistrationReport, select_device_match) == 144);
+static_assert(offsetof(NeuralFxRegistrationReport, counts) == 164);

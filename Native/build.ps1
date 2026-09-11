@@ -18,7 +18,7 @@ function Replace-Once([string]$Text, [string]$Before, [string]$After) {
     if (($Text.Split(@($Before), [StringSplitOptions]::None).Count - 1) -ne 1) { throw "Native patch marker missing or ambiguous: $Before" }
     return $Text.Replace($Before, $After)
 }
-$source = Replace-Once $source '#define FEED_VERSION "0.15.1"' ('#include "neuralfx_inputs.h"' + "`n" + 'static NeuralFxHealth neuralfx_health = { sizeof(NeuralFxHealth), 1 };' + "`n" + '#define FEED_VERSION "0.15.1-neuralfx.10"')
+$source = Replace-Once $source '#define FEED_VERSION "0.15.1"' ('#include "neuralfx_inputs.h"' + "`n" + 'static NeuralFxHealth neuralfx_health = { sizeof(NeuralFxHealth), 1 };' + "`n" + '#define FEED_VERSION "0.15.1-neuralfx.11"')
 $source = Replace-Once $source '    CK("queue Signal(fence12)");' @'
     CK("queue Signal(fence12)");
     if (FAILED(neuralfx_signal) || FAILED(g.dev12->GetDeviceRemovedReason()))
