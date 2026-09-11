@@ -90,7 +90,7 @@ static bool NeuralFxDecode(const void* input, uint32_t bytes, NeuralFxFrameV3& o
         std::memcpy(&decoded, input, sizeof(decoded));
         if (decoded.magic != NFX_MAGIC || !decoded.camera || !decoded.epoch || decoded.flags || decoded.reserved) return false;
         if (!NeuralFxFinite(decoded.mv_scale_x) || !NeuralFxFinite(decoded.mv_scale_y)) return false;
-        if (decoded.motion_handle && (decoded.mv_scale_x <= 0 || decoded.mv_scale_y <= 0)) return false;
+        if (decoded.motion_handle && (decoded.mv_scale_x == 0.0f || decoded.mv_scale_y == 0.0f)) return false;
     } else return false;
     if (!decoded.frame || !decoded.width || !decoded.height || decoded.width > 16384 || decoded.height > 16384) return false;
     if (!NeuralFxFinite(decoded.jitter_x) || !NeuralFxFinite(decoded.jitter_y)) return false;

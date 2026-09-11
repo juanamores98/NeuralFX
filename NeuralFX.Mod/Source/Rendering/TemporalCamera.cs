@@ -19,6 +19,7 @@ namespace NeuralFX.Rendering
         private readonly EngineInputProvider _inputs = new EngineInputProvider();
         private Vector3 _position; private Quaternion _rotation;
         private float _fov, _scale; private int _width, _height, _presentWidth, _presentHeight; private bool _previous;
+        private bool _terrainCandidate;
         public uint Epoch { get { return _frames.Epoch; } }
         public void Awake() { _camera = GetComponent<Camera>(); }
         public void RequestReset() { unchecked { ResetSerial++; } }
@@ -37,6 +38,8 @@ namespace NeuralFX.Rendering
             if (width <= 0 || height <= 0 || width > Bridge.Capabilities.MaxDimension || height > Bridge.Capabilities.MaxDimension) return;
             if (presentWidth <= 0 || presentHeight <= 0 || presentWidth > Bridge.Capabilities.MaxDimension || presentHeight > Bridge.Capabilities.MaxDimension) return;
             bool resize = width != _width || height != _height || presentWidth != _presentWidth || presentHeight != _presentHeight;
+            bool terrainCandidate = ModSettings.ExperimentalOptIn && ModSettings.EnableNativeMotionVectors && ModSettings.EnableTerrainDepthCandidate;
+            if (terrainCandidate != _terrainCandidate) { RequestReset(); _terrainCandidate = terrainCandidate; }
             bool cut = !_previous || resize || Vector3.Distance(_camera.transform.position, _position) > Mathf.Max(40f, Mathf.Abs(_camera.transform.position.y) * .8f) ||
                 Quaternion.Angle(_camera.transform.rotation, _rotation) > 35f || Mathf.Abs(_camera.fieldOfView - _fov) > 10f || _scale != Time.timeScale;
             if (cut) RequestReset();
@@ -52,22 +55,27 @@ namespace NeuralFX.Rendering
             {
                 EnsureCameraModes();
                 // Los vectores se reservan al tamaño del frame anunciado y se copian al hueco
-                // que la cámara ocupa dentro de él, que es lo que dice pixelRect. Un blit
-                // directo los estiraría un 11,7% en vertical y cada píxel leería el movimiento
-                // de otra fila.
+                // que la cámara ocupa dentro de él. En Unity pixelRect tiene el origen abajo a
+                // la izquierda; en D3D11 la textura destino usa origen arriba a la izquierda.
+                // Para Main Camera a 4K (3840x1933 sobre 3840x2160): dstY = 2160 - (227 + 1933) = 0.
                 Rect view = _camera.pixelRect;
                 int x = Mathf.RoundToInt(view.x), y = Mathf.RoundToInt(view.y);
+                int dstX = Mathf.Clamp(x, 0, Mathf.Max(0, presentWidth - width));
+                int dstY = Mathf.Clamp(presentHeight - (y + height), 0, Mathf.Max(0, presentHeight - height));
                 if (!_inputs.Prepare(Bridge, cameraId, _frames.Epoch, presentWidth, presentHeight)) MotionState = "reserva rechazada: " + _inputs.Failure;
                 else
                 {
-                    motion = _inputs.Record(_event, width, height, x, y);
-                    MotionState = motion != 0 ? "enviado " + width + "x" + height + " en " + x + "," + y : "sin enviar: " + _inputs.Failure;
+                    motion = _inputs.Record(_event, width, height, dstX, dstY, terrainCandidate);
+                    MotionState = motion != 0 ? "enviado " + width + "x" + height + " en " + dstX + "," + dstY : "sin enviar: " + _inputs.Failure;
+                    if (terrainCandidate) MotionState += Bridge.SupportsTerrainCandidate ? " · candidato terreno solicitado (100%)" : " · candidato sin soporte en este puente";
                 }
             }
+            float mvX = motion != 0 ? (ModSettings.InvertMotionX ? width : -width) : 1.0f;
+            float mvY = motion != 0 ? (ModSettings.InvertMotionY ? height : -height) : 1.0f;
             var frame = new NativeFrame {
                 Size = 64, Version = 3, Magic = 0x4e465833, Frame = _frames.NextFrame(), ResetSerial = unchecked((uint)ResetSerial),
                 Camera = cameraId, Epoch = _frames.Epoch, Width = (uint)presentWidth, Height = (uint)presentHeight,
-                MotionHandle = motion, MvScaleX = motion != 0 ? width : 1, MvScaleY = motion != 0 ? height : 1
+                MotionHandle = motion, MvScaleX = mvX, MvScaleY = mvY
             };
             // Jitter intentionally stays zero: feeder has no prepared-frame/fallback contract.
             if (Bridge.Submit(ref frame)) _event.IssuePluginEvent(Bridge.RenderEvent, unchecked((int)frame.Frame));

@@ -1,7 +1,7 @@
 // Deliberately limited Unity doubles: contract tests, never game/GPU evidence.
 using System;
 namespace UnityEngine {
- public class Object {public string name; public GameObject gameObject {get{return new GameObject();}} public static void Destroy(Object o) {}}
+ public class Object {public string name; public GameObject gameObject {get{return new GameObject();}} public static void Destroy(Object o) {}public static void DontDestroyOnLoad(Object o){}}
  public class GameObject:Object {public GameObject(){}public GameObject(string s){name=s;}public T AddComponent<T>() where T:new(){return new T();}public T GetComponent<T>() where T:class{return null;}}
 
  public class MonoBehaviour:Object {public bool enabled=true;public Camera TestCamera; public T GetComponent<T>() where T:class {return TestCamera as T;}}
@@ -12,6 +12,7 @@ namespace UnityEngine {
 
   public Matrix4x4 projectionMatrix,nonJitteredProjectionMatrix; public DepthTextureMode depthTextureMode;
   public Transform transform=new Transform();public int pixelWidth=1920,pixelHeight=1080;public float fieldOfView=60;
+  public Rect rect=new Rect(0,0,1,1),pixelRect=new Rect(0,0,1920,1080);
   public int GetInstanceID(){return 42;} public void AddCommandBuffer(Rendering.CameraEvent e,Rendering.CommandBuffer b){}public void RemoveCommandBuffer(Rendering.CameraEvent e,Rendering.CommandBuffer b){}
  }
  public class Transform {public Vector3 position;public Quaternion rotation;}
@@ -20,17 +21,21 @@ namespace UnityEngine {
  public struct Matrix4x4 {private float[] _data; public float this[int i] {get{return _data==null?0:_data[i];} set{var copy=_data==null?new float[16]:(float[])_data.Clone();copy[i]=value;_data=copy;}}}
  [Flags]public enum DepthTextureMode {None=0,Depth=1,MotionVectors=4}
  public enum RenderTextureFormat {RGHalf}public enum RenderTextureReadWrite {Linear}public enum FilterMode {Point}
- public class RenderTexture:Object {public RenderTexture(int w,int h,int d,RenderTextureFormat f,RenderTextureReadWrite r){}public string name;public bool useMipMap;public FilterMode filterMode; public bool Create(){return true;}public IntPtr GetNativeTexturePtr(){throw new Exception("No pointer acquisition expected without consent");}}
- public static class SystemInfo {public static Rendering.GraphicsDeviceType graphicsDeviceType=Rendering.GraphicsDeviceType.Direct3D11;public static bool SupportsRenderTextureFormat(RenderTextureFormat f){return true;}}
- public static class Mathf {public static float Max(float a,float b){return Math.Max(a,b);}public static float Abs(float a){return Math.Abs(a);}public static float Min(float a,float b){return Math.Min(a,b);}public static float Clamp(float v,float a,float b){return Max(a,Min(v,b));}}
+ public class RenderTexture:Object {public RenderTexture(int w,int h,int d,RenderTextureFormat f,RenderTextureReadWrite r){width=w;height=h;}public int width,height;public static RenderTexture active;public bool useMipMap;public FilterMode filterMode; public bool Create(){return true;}public IntPtr GetNativeTexturePtr(){throw new Exception("No pointer acquisition expected without consent");}}
+ public static class SystemInfo {public static Rendering.GraphicsDeviceType graphicsDeviceType=Rendering.GraphicsDeviceType.Direct3D11;public static Rendering.CopyTextureSupport copyTextureSupport=Rendering.CopyTextureSupport.Basic;public static bool SupportsRenderTextureFormat(RenderTextureFormat f){return true;}}
+ public static class Mathf {public static int RoundToInt(float v){return (int)Math.Round(v);}public static int Max(int a,int b){return Math.Max(a,b);}public static int Clamp(int v,int a,int b){return Math.Max(a,Math.Min(v,b));}public static float Max(float a,float b){return Math.Max(a,b);}public static float Abs(float a){return Math.Abs(a);}public static float Min(float a,float b){return Math.Min(a,b);}public static float Clamp(float v,float a,float b){return Max(a,Min(v,b));}}
+ public struct Rect {public float x,y,width,height;public Rect(float a,float b,float w,float h){x=a;y=b;width=w;height=h;}}
+ public static class GL {public static void Clear(bool depth,bool color,Color value){}}
+ public static class Application {public static void Quit(){}}
  public static class Time {public static float timeScale=1,unscaledTime,unscaledDeltaTime;public static int frameCount;}
  public static class Debug {public static void LogWarning(object m){}public static void Log(object m){}public static void LogError(object m){}}
 }
 namespace UnityEngine.Rendering {
  public enum GraphicsDeviceType {Direct3D11,Direct3D12}
+ [Flags]public enum CopyTextureSupport {None=0,Basic=1}
  public enum CameraEvent {AfterEverything}public enum BuiltinRenderTextureType {MotionVectors}
  public struct RenderTargetIdentifier {public RenderTargetIdentifier(UnityEngine.RenderTexture t){}}
- public class CommandBuffer {public string name;public void Clear(){}public void Release(){}public void IssuePluginEvent(IntPtr p,int f){}public void Blit(BuiltinRenderTextureType t,RenderTargetIdentifier d){}}
+ public class CommandBuffer {public string name;public void Clear(){}public void Release(){}public void IssuePluginEvent(IntPtr p,int f){}public void Blit(BuiltinRenderTextureType t,RenderTargetIdentifier d){}public void CopyTexture(BuiltinRenderTextureType s,int a,int b,int x,int y,int w,int h,RenderTargetIdentifier d,int c,int e,int dx,int dy){}}
 }
 
 namespace UnityEngine {
@@ -39,7 +44,7 @@ namespace UnityEngine {
  public static class Input {public static bool GetKey(KeyCode k){return false;}public static bool GetKeyDown(KeyCode k){return false;}}
  public struct Vector2 {public float x,y;public Vector2(float a,float b){x=a;y=b;}public static float Distance(Vector2 a,Vector2 b){return 0;}}
  public struct Color32 {public Color32(byte r,byte g,byte b,byte a){}public static implicit operator Color(Color32 c){return new Color();}}
- public struct Color {public Color(float r,float g,float b,float a){}public static Color Lerp(Color a,Color b,float t){return a;}}
+ public struct Color {public static Color clear;public Color(float r,float g,float b,float a){}public static Color Lerp(Color a,Color b,float t){return a;}}
  public enum TextureFormat {ARGB32}
  public class Texture2D:Object {public Texture2D(int w,int h,TextureFormat f,bool m){}public void SetPixel(int x,int y,Color c){}public void Apply(bool a,bool b){}}
 }
@@ -48,23 +53,27 @@ namespace ColossalFramework.UI {
  public enum UIOrientation {Vertical}
  public class UIComponent:Object {
   public float width=460,height=30;public bool isVisible,isInteractive,clipChildren,containsFocus;public Vector3 relativePosition;
+  public bool isEnabled=true;public int zOrder;public UIComponent parent;public Color32 color;
   public Vector2 size {get{return new Vector2(width,height);}set{width=value.x;height=value.y;}}
   public string tooltip;public readonly List<UIComponent> Children=new List<UIComponent>();
-  public T AddUIComponent<T>() where T:UIComponent,new(){var child=new T();Children.Add(child);return child;}
+  public T AddUIComponent<T>() where T:UIComponent,new(){var child=new T();child.parent=this;Children.Add(child);return child;}
   public UIComponent AddUIComponent(Type t){var child=(UIComponent)Activator.CreateInstance(t);Children.Add(child);return child;}
   public T[] GetComponentsInChildren<T>() where T:UIComponent {var list=new List<T>();foreach(var c in Children){if(c is T)list.Add((T)c);list.AddRange(c.GetComponentsInChildren<T>());}return list.ToArray();}
+  public T[] GetComponentsInChildren<T>(bool inactive) where T:UIComponent {return GetComponentsInChildren<T>();}
+  public T Find<T>(string name) where T:UIComponent {foreach(var c in GetComponentsInChildren<T>())if(c.name==name)return c;return null;}
  }
  public class UIView:UIComponent {public static UIView Current=new UIView();public float fixedWidth=1280,fixedHeight=720;public static UIView GetAView(){return Current;}}
  public class UIPanel:UIComponent {public string backgroundSprite;}
  public class UIScrollablePanel:UIPanel {public UIOrientation scrollWheelDirection;}
- public class UILabel:UIComponent {public string text;public bool autoSize,autoHeight,wordWrap;public float textScale;}
- public class UIButton:UIComponent {public string text,normalBgSprite,hoveredBgSprite,focusedBgSprite;public event Action<UIComponent,object> eventClicked;public void Click(){if(eventClicked!=null)eventClicked(this,null);}}
+ public class UILabel:UIComponent {public string text;public bool autoSize,autoHeight,wordWrap;public float textScale;public Color32 textColor;}
+ public class UIButton:UIComponent {public object font;public float textScale;public Color32 textColor,hoveredTextColor,pressedTextColor,disabledTextColor;public int textHorizontalAlignment,textVerticalAlignment;public bool wordWrap;public string pressedBgSprite,disabledBgSprite;public string text,normalBgSprite,hoveredBgSprite,focusedBgSprite;public event Action<UIComponent,object> eventClicked;public void Click(){if(eventClicked!=null)eventClicked(this,null);}}
+ public class TestCheckbox:UIComponent {public bool Value;public Action<bool> Changed;public void Set(bool value){if(!isEnabled)throw new InvalidOperationException("Disabled checkbox");Value=value;Changed(value);}}
  public class UITextField:UIComponent {}
  public class UIDragHandle:UIComponent {public UIComponent target;}
  public class UIHelper:ICities.UIHelperBase {public object self=new UIPanel();}
 }
 namespace ICities {
- public class UIHelperBase {public UIHelperBase AddGroup(string name){return new ColossalFramework.UI.UIHelper();}public void AddCheckbox(string text,bool value,Action<bool> changed){}public void AddButton(string text,Action clicked){}}
+ public class UIHelperBase {public static readonly System.Collections.Generic.Dictionary<string,ColossalFramework.UI.TestCheckbox> Checkboxes=new System.Collections.Generic.Dictionary<string,ColossalFramework.UI.TestCheckbox>();public UIHelperBase AddGroup(string name){return new ColossalFramework.UI.UIHelper();}public object AddCheckbox(string text,bool value,Action<bool> changed){var box=new ColossalFramework.UI.TestCheckbox {Value=value,Changed=changed};Checkboxes[text]=box;return box;}public void AddButton(string text,Action clicked){}}
  public enum LoadMode {NewGame,LoadGame}
  public class LoadingExtensionBase {public virtual void OnLevelLoaded(LoadMode m){}public virtual void OnLevelUnloading(){}}
  public interface IUserMod {string Name{get;}string Description{get;}}

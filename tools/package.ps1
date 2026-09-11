@@ -11,7 +11,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Managed build failed.' }
     & dotnet test NeuralFX.Tests/NeuralFX.Tests.csproj -c Release @managedArgs --nologo -v:q
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
-    $package = Join-Path $taskRoot ('artifacts/releases/NeuralFX-2.1.0-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
+    $package = Join-Path $taskRoot ('artifacts/releases/NeuralFX-2.1.1-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
     New-Item -ItemType Directory -Path $package -Force | Out-Null
     # Un unico ejecutable, sin DLL sueltas: asi puede vivir dentro de Addons/Mods, que es
     # donde el usuario espera encontrarlo. CS1 escanea *.dll de esa carpeta recursivamente y
@@ -33,18 +33,19 @@ try {
     $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $package 'deployment-manifest.json') -Encoding utf8
     Compress-Archive -LiteralPath $package -DestinationPath ($package + '.zip')
     if ($Deploy) {
+        & (Join-Path $PSScriptRoot 'Close-NeuralFXForDeploy.ps1')
         & (Join-Path $package 'Install-NeuralFX.ps1')
         if ($LASTEXITCODE -ne 0) { throw 'Package install failed.' }
         # Install-NeuralFX solo pone el mod y el Hub. El addon nativo de la carpeta del juego
         # lo escribia unicamente el boton del Hub, asi que cada cambio del addon terminaba en
-        # "abre el Hub y pulsa reinstalar". Aqui se refresca por el mismo camino transaccional,
-        # y solo si de verdad hace falta.
+        # "abre el Hub y pulsa reinstalar". Por preferencia explícita del usuario, cada entrega
+        # hace desinstalación y reinstalación completas mediante los servicios del Hub.
         if (!$SkipPipelineRefresh) {
             & dotnet build tools/NeuralFX.PipelineInstall/NeuralFX.PipelineInstall.csproj -c Release @managedArgs --nologo -v:q
             if ($LASTEXITCODE -ne 0) { throw 'Pipeline installer build failed.' }
             # Se invoca el ejecutable, no "dotnet run": ese reenvia sus propias opciones al
             # programa y la primera version se trago un --nologo como si fuera argumento.
-            & 'tools/NeuralFX.PipelineInstall/bin/Release/net8.0-windows/NeuralFX.PipelineInstall.exe' --si-hace-falta --addon 'Native/out/dlss5-feed.addon64'
+            & 'tools/NeuralFX.PipelineInstall/bin/Release/net8.0-windows/NeuralFX.PipelineInstall.exe' --reinstalar --addon 'Native/out/dlss5-feed.addon64'
             if ($LASTEXITCODE -ne 0) { throw "Pipeline refresh failed ($LASTEXITCODE). El estado anterior sigue recuperable desde el Hub." }
         }
     }

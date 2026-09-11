@@ -1,4 +1,4 @@
-﻿[
+[
   {
     "Id": "reshade_addon",
     "DisplayName": "ReShade 6.8.0 con add-ons",
@@ -19,22 +19,15 @@
   {
     "Id": "dlss5_feeder",
     "DisplayName": "DLSS5-Feeder · efecto companion",
-    "Description": "Efecto compatible con el puente NeuralFX basado en 0.15.1. El shader es byte a byte el mismo que en beta.4.",
+    "Description": "Efecto integrado con el candidato de profundidad del terreno, activable desde las opciones experimentales del mod.",
     "Category": 1,
     "TargetRelativePath": "reshade-shaders/Shaders/DLSS5_Feed.fx",
-    "SourceType": "PublicDownload",
-    "CanAutoDownload": true,
-    "DownloadUrl": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v0.15.1/DLSS5-Feeder-0.15.1.zip",
+    "SourceType": "Bundled",
+    "CanAutoDownload": false,
     "OfficialWebUrl": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases",
-    "ReleaseRepository": "jlrouzies-fr/DLSS5-Feeder",
-    "DownloadType": "ZipExtract",
-    "ExpectedSha256": "2e44e81e691e75e532b9b7babc278a12615cb7f0fd9ef854da50e6ef17b272f4",
-    "Version": "v0.15.1",
+    "Version": "0.15.1-neuralfx.16",
     "PackageFiles": {
       "DLSS5_Feed.fx": "reshade-shaders/Shaders/DLSS5_Feed.fx"
-    },
-    "ExpectedFileSha256": {
-      "reshade-shaders/Shaders/DLSS5_Feed.fx": "cdac08a721b14b97187dd86c5b5bead157c9063d7ee859a0f131a8ee791695f1"
     }
   },
   {
@@ -209,7 +202,7 @@
     "TargetRelativePath": "dlss5-feed.addon64",
     "SourceType": "Bundled",
     "CanAutoDownload": false,
-    "Version": "0.15.1-neuralfx.14",
+    "Version": "0.15.1-neuralfx.16",
     "OfficialWebUrl": "https://github.com/juanamores98/NeuralFX"
   }
 ]

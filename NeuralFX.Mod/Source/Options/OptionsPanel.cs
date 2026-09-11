@@ -57,14 +57,31 @@ namespace NeuralFX.Options
             }));
 
             var experimental = helper.AddGroup("Pruebas experimentales");
-            UIComponent motion = null;
+            UIComponent motion = null, invX = null, invY = null, terrain = null;
             experimental.AddCheckbox("Permitir capacidades sin validar", ModSettings.ExperimentalOptIn, value => {
                 ModSettings.ExperimentalOptIn = value; ModSettings.Save();
                 if (motion != null) motion.isEnabled = value;
+                if (invX != null) invX.isEnabled = value && ModSettings.EnableNativeMotionVectors;
+                if (invY != null) invY.isEnabled = value && ModSettings.EnableNativeMotionVectors;
+                if (terrain != null) terrain.isEnabled = value && ModSettings.EnableNativeMotionVectors;
             });
-            motion = experimental.AddCheckbox("Preferir vectores de movimiento de Unity", ModSettings.EnableNativeMotionVectors, value => { ModSettings.EnableNativeMotionVectors = value; ModSettings.Save(); }) as UIComponent;
+            motion = experimental.AddCheckbox("Preferir vectores de movimiento de Unity", ModSettings.EnableNativeMotionVectors, value => {
+                ModSettings.EnableNativeMotionVectors = value; ModSettings.Save();
+                if (invX != null) invX.isEnabled = ModSettings.ExperimentalOptIn && value;
+                if (invY != null) invY.isEnabled = ModSettings.ExperimentalOptIn && value;
+                if (terrain != null) terrain.isEnabled = ModSettings.ExperimentalOptIn && value;
+            }) as UIComponent;
             if (motion != null) motion.isEnabled = ModSettings.ExperimentalOptIn;
-            Note(experimental, "Los vectores de Unity necesitan puente ABI 3; su cobertura y su signo están sin validar en CS1 y, ante un rechazo, se vuelve al contrato óptico completo.");
+            invY = experimental.AddCheckbox("Invertir signo vertical (Y) de vectores", ModSettings.InvertMotionY, value => { ModSettings.InvertMotionY = value; ModSettings.Save(); }) as UIComponent;
+            if (invY != null) invY.isEnabled = ModSettings.ExperimentalOptIn && ModSettings.EnableNativeMotionVectors;
+            invX = experimental.AddCheckbox("Invertir signo horizontal (X) de vectores", ModSettings.InvertMotionX, value => { ModSettings.InvertMotionX = value; ModSettings.Save(); }) as UIComponent;
+            if (invX != null) invX.isEnabled = ModSettings.ExperimentalOptIn && ModSettings.EnableNativeMotionVectors;
+            Note(experimental, "Por defecto ambos signos van invertidos (-ancho, -alto) según el estándar DLSS; estas casillas permiten invertir la orientación de cada eje para pruebas.");
+            terrain = experimental.AddCheckbox("Candidato: corregir profundidad del terreno", ModSettings.EnableTerrainDepthCandidate, value => {
+                ModSettings.EnableTerrainDepthCandidate = value; ModSettings.Save();
+            }) as UIComponent;
+            if (terrain != null) terrain.isEnabled = ModSettings.ExperimentalOptIn && ModSettings.EnableNativeMotionVectors;
+            Note(experimental, "Puedes activarlo y desactivarlo durante la partida. Requiere vectores de Unity y trabajo al 100%. Ajusta la profundidad cuando su tamaño coincide con el de la cámara; cada cambio reinicia el historial. Su mejora visual está pendiente de confirmar.");
             Note(experimental, "Jitter de cámara, SR interno y aislamiento de la UI siguen sin implementar. No aparecen aquí porque no harían nada.");
         }
         private static void Run(UILabel label, Func<string> action) { try { if (label != null) label.text = action(); else action(); } catch (Exception ex) { if (label != null) label.text = ex.Message; UnityEngine.Debug.LogWarning("[NeuralFX] " + ex.Message); } }

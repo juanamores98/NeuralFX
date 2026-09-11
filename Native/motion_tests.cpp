@@ -179,6 +179,24 @@ static void Registration(ID3D11Device* device) {
     assert(FAILED(crossed.select_probe_hresult));
     otherContext->Release();other->Release();
     NeuralFX_ReleaseMotion(live);opticalView->Release();sized->Release();
+    // The candidate follows the reserved resource, not the next frame's global settings.
+    handle=NeuralFX_RegisterMotion(good,7,3);assert(handle);
+    NeuralFxFrameV3 depthFrame={64,3,1,1,64,64,0,0,7,3,0,handle,64,64,NFX_MAGIC,0};
+    float rect[4]={};
+    assert(!NeuralFX_SetMotionDepthRect(handle,1,0,0,64,57)); // no reservation
+    assert(NeuralFX_ReserveMotion(handle));
+    assert(NeuralFX_SetMotionDepthRect(handle,1,2,3,60,57));
+    assert(NeuralFxReadMotionDepthRect(depthFrame,rect)&&rect[0]==2&&rect[1]==3&&rect[2]==60&&rect[3]==57);
+    depthFrame.camera=8;assert(!NeuralFxReadMotionDepthRect(depthFrame,rect));depthFrame.camera=7;
+    depthFrame.epoch=4;assert(!NeuralFxReadMotionDepthRect(depthFrame,rect));depthFrame.epoch=3;
+    assert(!NeuralFX_SetMotionDepthRect(handle,1,0xffffffffu,0,64,57));
+    assert(!NeuralFxReadMotionDepthRect(depthFrame,rect));
+    assert(NeuralFX_SetMotionDepthRect(handle,1,0,0,64,57));
+    assert(NeuralFX_SetMotionDepthRect(handle,0,0,0,64,57)&&!NeuralFxReadMotionDepthRect(depthFrame,rect));
+    assert(NeuralFX_SetMotionDepthRect(handle,1,0,0,64,57));
+    NeuralFX_CancelMotion(handle);assert(!NeuralFxReadMotionDepthRect(depthFrame,rect));
+    assert(NeuralFX_ReserveMotion(handle)&&!NeuralFxReadMotionDepthRect(depthFrame,rect));
+    NeuralFX_CancelMotion(handle);NeuralFX_ReleaseMotion(handle);
     good->Release();
 }
 int main(){

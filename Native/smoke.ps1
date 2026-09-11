@@ -15,6 +15,7 @@ foreach ($relative in $manifest.InstalledFiles) {
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'out/NeuralFX.Smoke.exe') -Destination $fixture
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'out/dlss5-feed.addon64') -Destination $fixture -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'out/DLSS5_Feed.fx') -Destination (Join-Path $fixture 'reshade-shaders/Shaders/DLSS5_Feed.fx') -Force
 if ($RenoDxOverride) { Copy-Item -LiteralPath $RenoDxOverride -Destination (Join-Path $fixture 'renodx-dlss5.addon64') -Force }
 if ($SrOnly) {
     # Physically remove the NR consumer from this isolated copy for the carrier control.

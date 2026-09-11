@@ -48,11 +48,12 @@ namespace NeuralFX.Hub.Services
         public Dictionary<string, string> GetPackageFiles(DependencyItem item) => item.PackageFiles.Count > 0
             ? item.PackageFiles : new() { [item.ArchiveExtractFileName ?? Path.GetFileName(item.TargetRelativePath)] = item.TargetRelativePath };
         private string PackageDirectory(DependencyItem item) => ManagedPaths.Resolve(CacheDirectory, item.Id);
+        private static string BundledResource(DependencyItem item) => item.Id == "dlss5_feeder" ? "NeuralFX.Native.Shader" : "NeuralFX.Native.Feeder";
         public Dictionary<string, byte[]> ReadPayload(DependencyItem item)
         {
             if (item.SourceType == "Bundled")
             {
-                using var input = Assembly.GetExecutingAssembly().GetManifestResourceStream("NeuralFX.Native.Feeder") ?? throw new FileNotFoundException("Compila Native/build.ps1 y después el Hub para incluir el puente.");
+                using var input = Assembly.GetExecutingAssembly().GetManifestResourceStream(BundledResource(item)) ?? throw new FileNotFoundException("Compila Native/build.ps1 y después el Hub para incluir el puente y su shader.");
                 using var output = new MemoryStream(); input.CopyTo(output);
                 return new() { [item.TargetRelativePath] = output.ToArray() };
             }
@@ -87,7 +88,7 @@ namespace NeuralFX.Hub.Services
                 if (item.IsEmbedded) item.IsInCache = true;
                 else if (item.SourceType == "Bundled")
                 {
-                    using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("NeuralFX.Native.Feeder");
+                    using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(BundledResource(item));
                     item.IsInCache = stream != null; item.FileSize = stream?.Length ?? 0;
                     if (stream != null) item.AvailableChecksums[item.TargetRelativePath] = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
                     if (stream == null) item.StatusMessage = "Compila Native/build.ps1 antes de publicar el Hub.";

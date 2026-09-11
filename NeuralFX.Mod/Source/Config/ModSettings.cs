@@ -16,6 +16,9 @@ namespace NeuralFX.Config
         public bool EnableRenderTrace;
         public bool EnableCameraJitter = false;
         public bool EnableNativeMotionVectors = false;
+        public bool EnableTerrainDepthCandidate = false;
+        public bool InvertMotionX = false;
+        public bool InvertMotionY = false;
         public bool EnhanceTextureClarity = false;
         public bool WarnOnAaConflict = true;
         public bool EnableHotkey = true;
@@ -35,6 +38,7 @@ namespace NeuralFX.Config
         public static bool PipelineEnabled { get { return _data.PipelineEnabled; } set { _data.PipelineEnabled = value; } }
         public static bool ExperimentalOptIn { get { return _data.ExperimentalOptIn; } set { _data.ExperimentalOptIn = value; } }
         public static bool EnableRenderTrace { get { return _data.EnableRenderTrace; } set { _data.EnableRenderTrace = value; } }
+        public static bool EnableTerrainDepthCandidate { get { return _data.EnableTerrainDepthCandidate; } set { _data.EnableTerrainDepthCandidate = value; } }
         public static string MigrationNotice { get { return _data.ImportedClarityPreference ? "Se retiró el ajuste global de LOD/anisotropía. Reinicia el juego para recuperar su configuración de inicio; no existe snapshot antiguo fiable." : ""; } }
         public static ModSettingsData Migrate(ModSettingsData data)
         {
@@ -67,6 +71,18 @@ namespace NeuralFX.Config
         {
             get => _data.EnableNativeMotionVectors;
             set => _data.EnableNativeMotionVectors = value;
+        }
+
+        public static bool InvertMotionX
+        {
+            get => _data.InvertMotionX;
+            set => _data.InvertMotionX = value;
+        }
+
+        public static bool InvertMotionY
+        {
+            get => _data.InvertMotionY;
+            set => _data.InvertMotionY = value;
         }
 
         public static bool EnhanceTextureClarity

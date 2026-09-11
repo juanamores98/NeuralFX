@@ -9,11 +9,20 @@ namespace NeuralFX.Rendering
         public bool Conflict { get; private set; }
         public void Acquire(Camera camera)
         {
-            if (_camera == camera) return;
-            Release(); if (camera == null) return;
-            _camera = camera; _before = camera.depthTextureMode;
-            _written = _before | DepthTextureMode.Depth | DepthTextureMode.MotionVectors;
-            camera.depthTextureMode = _written; Conflict = false;
+            if (camera == null) { Release(); return; }
+            if (_camera != camera)
+            {
+                Release();
+                _camera = camera;
+                _before = camera.depthTextureMode;
+            }
+            DepthTextureMode desired = DepthTextureMode.Depth | DepthTextureMode.MotionVectors;
+            if ((camera.depthTextureMode & desired) != desired)
+            {
+                _written = camera.depthTextureMode | desired;
+                camera.depthTextureMode = _written;
+            }
+            Conflict = false;
         }
         public void Release()
         {

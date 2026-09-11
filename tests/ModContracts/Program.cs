@@ -29,10 +29,27 @@ class Program {
   var modes=new CameraModeLease();camera.depthTextureMode=DepthTextureMode.Depth;modes.Acquire(camera);modes.Release();Check(camera.depthTextureMode==DepthTextureMode.Depth,"Exact original flags restored");
   modes.Acquire(camera);camera.depthTextureMode=(DepthTextureMode)7;modes.Release();Check((int)camera.depthTextureMode==7&&modes.Conflict,"Later camera flags preserved");
   var panel=new NeuralFX.UI.TelemetryPanel();panel.Toggle();Check(panel.Visible,"Panel opens");
-  var view=ColossalFramework.UI.UIView.GetAView();view.fixedWidth=320;view.fixedHeight=240;panel.Update("metrics","status","details","conflicts");
+  var view=ColossalFramework.UI.UIView.GetAView();view.fixedWidth=320;view.fixedHeight=240;panel.Update(new TelemetryFrame(),"status");
   var root=view.GetComponentsInChildren<ColossalFramework.UI.UIPanel>()[0];Check(root.width<=320&&root.height<=240,"Panel fits small viewport");
   var field=view.AddUIComponent<ColossalFramework.UI.UITextField>();field.containsFocus=true;Check(NeuralFX.UI.TelemetryPanel.HasTextFocus(),"Text focus prevents hotkey");field.containsFocus=false;Check(!NeuralFX.UI.TelemetryPanel.HasTextFocus(),"Hotkey released after edit");
   NeuralFX.Options.OptionsPanel.Build(new ColossalFramework.UI.UIHelper());
+  Check(!new ModSettingsData().EnableTerrainDepthCandidate,"Candidate defaults to Off");
+  var persisted=new ModSettingsData {SchemaVersion=3,EnableTerrainDepthCandidate=true};
+  var xml=new StringWriter();serializer.Serialize(xml,persisted);
+  Check(((ModSettingsData)serializer.Deserialize(new StringReader(xml.ToString()))).EnableTerrainDepthCandidate,"Candidate XML roundtrip");
+  Check(!((ModSettingsData)serializer.Deserialize(new StringReader("<ModSettingsData><SchemaVersion>3</SchemaVersion></ModSettingsData>"))).EnableTerrainDepthCandidate,"Existing settings keep candidate Off");
+  // Exercise actual menu callbacks without writing the user's settings file.
+  typeof(ModSettings).GetField("_readOnly",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic).SetValue(null,true);
+  var boxes=ICities.UIHelperBase.Checkboxes;
+  var terrain=boxes["Candidato: corregir profundidad del terreno"];
+  Check(!terrain.isEnabled&&!terrain.Value,"Candidate gated by experimental opt-in");
+  boxes["Permitir capacidades sin validar"].Set(true);
+  Check(!terrain.isEnabled,"Candidate requires native motion");
+  boxes["Preferir vectores de movimiento de Unity"].Set(true);
+  Check(terrain.isEnabled,"Candidate available with native motion");
+  terrain.Set(true);Check(ModSettings.EnableTerrainDepthCandidate,"Menu enables candidate");
+  terrain.Set(false);Check(!ModSettings.EnableTerrainDepthCandidate,"Menu disables candidate");
+  boxes["Permitir capacidades sin validar"].Set(false);Check(!terrain.isEnabled,"Disabling experiments gates candidate");
   var state=new TelemetryFrame {Flags=RuntimeFlags.CameraPresent|RuntimeFlags.PipelineRequested|RuntimeFlags.NativeConnected|RuntimeFlags.EvaluationSucceeded};
   Check(SessionViewState.Summary(state).Contains("NR sin confirmar"),"NGX does not confirm NR");
   Console.WriteLine(checks+" mod contract checks passed (Unity doubles; no GPU/game validation).");

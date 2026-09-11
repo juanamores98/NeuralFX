@@ -69,24 +69,25 @@ namespace NeuralFX.Rendering
         /// <summary>
         /// Copia los vectores de la cámara al hueco que ocupa dentro del frame anunciado.
         /// El origen es el bloque completo de la cámara; el destino, su posición en pantalla
-        /// con el origen abajo a la izquierda, que es como Unity da <c>pixelRect</c>.
+        /// con coordenadas D3D11 (origen arriba a la izquierda).
         /// </summary>
-        public uint Record(CommandBuffer commands, int sourceWidth, int sourceHeight, int x, int y)
+        public uint Record(CommandBuffer commands, int sourceWidth, int sourceHeight, int dstX, int dstY, bool terrainCandidate)
         {
             // Dos motivos distintos con el mismo cero era justo el defecto que costó tres
             // sesiones en el registro. Aquí se separan desde el principio.
             Failure = null;
-            if (sourceWidth <= 0 || sourceHeight <= 0 || x < 0 || y < 0 || x + sourceWidth > _width || y + sourceHeight > _height)
+            if (sourceWidth <= 0 || sourceHeight <= 0 || dstX < 0 || dstY < 0 || dstX + sourceWidth > _width || dstY + sourceHeight > _height)
             {
-                Failure = "la región " + sourceWidth + "x" + sourceHeight + " en " + x + "," + y +
+                Failure = "la región " + sourceWidth + "x" + sourceHeight + " en " + dstX + "," + dstY +
                     " no cabe en " + _width + "x" + _height;
                 return 0;
             }
             for (int i = 0; i < 3; ++i) if (_handles[i] != 0 && _bridge.ReserveMotion(_handles[i]))
             {
+                _bridge.SetMotionDepthRect(_handles[i], terrainCandidate, dstX, dstY, sourceWidth, sourceHeight);
                 // Executed AfterEverything, after this camera produced its inputs.
                 commands.CopyTexture(BuiltinRenderTextureType.MotionVectors, 0, 0, 0, 0, sourceWidth, sourceHeight,
-                    new RenderTargetIdentifier(_textures[i]), 0, 0, x, y);
+                    new RenderTargetIdentifier(_textures[i]), 0, 0, dstX, dstY);
                 return _handles[i];
             }
             // Ningún turno libre: los tres siguen en vuelo porque nadie los ha devuelto. El

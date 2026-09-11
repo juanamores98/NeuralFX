@@ -17,10 +17,10 @@ namespace NeuralFX.Hub.Services
         public InstallationEngineService(DependencyManagerService dependencyManager, Func<bool>? isGameRunning = null)
         { _dependencies = dependencyManager; _isGameRunning = isGameRunning ?? HardwareDiagnosticsService.IsCitiesSkylinesRunning; }
 
-        public Task<bool> InstallAsync(string gameDirectory, List<DependencyItem> items, Action<string>? logAction = null, bool enforceProcessClosed = true, PipelinePreset preset = PipelinePreset.Native, InstallationPreview? preview = null)
-            => Task.Run(() => Install(gameDirectory, items, logAction, enforceProcessClosed, preset, preview));
+        public Task<bool> InstallAsync(string gameDirectory, List<DependencyItem> items, Action<string>? logAction = null, bool enforceProcessClosed = true, PipelinePreset preset = PipelinePreset.Native, InstallationPreview? preview = null, Dictionary<string, byte[]>? preparedConfiguration = null)
+            => Task.Run(() => Install(gameDirectory, items, logAction, enforceProcessClosed, preset, preview, preparedConfiguration));
 
-        private bool Install(string root, List<DependencyItem> items, Action<string>? log, bool enforceClosed, PipelinePreset preset, InstallationPreview? preview)
+        private bool Install(string root, List<DependencyItem> items, Action<string>? log, bool enforceClosed, PipelinePreset preset, InstallationPreview? preview, Dictionary<string, byte[]>? preparedConfiguration)
         {
             try
             {
@@ -53,7 +53,7 @@ namespace NeuralFX.Hub.Services
                     if (!item.IsRequired && !item.IsInCache) continue;
                     foreach (var file in _dependencies.ReadPayload(item)) payload.Add(file.Key, file.Value);
                 }
-                foreach (var file in PipelineConfiguration.Create(root, preset)) payload.Add(file.Key, file.Value);
+                foreach (var file in preparedConfiguration ?? PipelineConfiguration.Create(root, preset)) payload.Add(file.Key, file.Value);
                 // Complete validation and payload preparation precedes all writes to the game.
                 foreach (string relative in payload.Keys) ManagedPaths.Resolve(root, relative);
                 using var transaction = new FileTransaction(root);

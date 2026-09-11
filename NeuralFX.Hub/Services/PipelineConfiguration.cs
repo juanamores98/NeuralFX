@@ -60,6 +60,7 @@ namespace NeuralFX.Hub.Services
             string sorting = Ini.Get(reshadePreset, "", "TechniqueSorting");
             reshadePreset = Ini.Set(reshadePreset, "", "TechniqueSorting", InsertOwned(string.IsNullOrWhiteSpace(sorting) ? techniques : sorting, ours));
             reshadePreset = Ini.Set(reshadePreset, "DLSS5_Feed.fx", "PreprocessorDefinitions", "DLSS5_MV_PROVIDER=3");
+            reshadePreset = Ini.Set(reshadePreset, "DLSS5_Feed.fx", "MASK_STRENGTH", "0.000000");
             reshadePreset = Ini.Set(reshadePreset, "NeuralFX_CAS.fx", "Sharpening", sharpness.ToString(CultureInfo.InvariantCulture));
             files["ReShadePreset.ini"] = Encoding.UTF8.GetBytes(reshadePreset);
             using var stream = typeof(PipelineConfiguration).Assembly.GetManifestResourceStream("NeuralFX.Hub.Assets.NeuralFX_CAS.fx")!;

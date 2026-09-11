@@ -1,6 +1,12 @@
-# Punto de continuación — 8 de septiembre de 2026, Hub 2.0.2
+# Punto de continuación — 11 de septiembre de 2026
 
-## Instrucción vigente del usuario
+La preferencia vigente exige desplegar siempre los cambios de desarrollo y completar la desinstalación/reinstalación con el juego y el Hub cerrados. Está autorizada su clausura normal para entregar. Véase [AGENTS.md](AGENTS.md). La entrega 2.1.1 está instalada y verificada; `artifacts/releases/ENTREGA-ACTUAL.txt` identifica el paquete.
+
+El candidato de terreno no corrigió el defecto. El usuario comprobó una mejora clara y estabilización más rápida al desactivar todas las capacidades experimentales, eligió usarlas apagadas y pidió cerrar con commit y push. Conservar `ExperimentalOptIn=false`; no continuar la investigación salvo nueva petición. Resultado en [TERRENO-2026-09-11.md](docs/TERRENO-2026-09-11.md).
+
+# Historial — 8 de septiembre de 2026, Hub 2.0.2
+
+## Instrucción histórica del usuario, sustituida por AGENTS.md
 
 El usuario retomó el desarrollo y autorizó todas las recomendaciones verificadas. Después indicó que **él hará las pruebas dentro del juego**. No abrir, cerrar ni manejar CS1/Windows para probarlo por cuenta propia. Si hace falta una captura o acción, explicar qué se necesita observar. Se puede seguir trabajando en código, archivos, registros y pruebas automatizadas sin control de escritorio. No hay automatización programada.
 

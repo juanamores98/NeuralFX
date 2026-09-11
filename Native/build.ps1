@@ -18,7 +18,7 @@ function Replace-Once([string]$Text, [string]$Before, [string]$After) {
     if (($Text.Split(@($Before), [StringSplitOptions]::None).Count - 1) -ne 1) { throw "Native patch marker missing or ambiguous: $Before" }
     return $Text.Replace($Before, $After)
 }
-$source = Replace-Once $source '#define FEED_VERSION "0.15.1"' ('#include "neuralfx_inputs.h"' + "`n" + 'static NeuralFxHealth neuralfx_health = { sizeof(NeuralFxHealth), 1 };' + "`n" + '#define FEED_VERSION "0.15.1-neuralfx.14"')
+$source = Replace-Once $source '#define FEED_VERSION "0.15.1"' ('#include "neuralfx_inputs.h"' + "`n" + 'static NeuralFxHealth neuralfx_health = { sizeof(NeuralFxHealth), 1 };' + "`n" + 'static uint32_t neuralfx_depth_frame = 0;' + "`n" + '#define FEED_VERSION "0.15.1-neuralfx.16"')
 $source = Replace-Once $source '    CK("queue Signal(fence12)");' @'
     CK("queue Signal(fence12)");
     if (FAILED(neuralfx_signal) || FAILED(g.dev12->GetDeviceRemovedReason()))
@@ -52,6 +52,11 @@ $nativeMvInjection = @'
                 neuralfx_gate.stale, neuralfx_gate.decode);
             NeuralFxGateLogged();
         }
+        if (neuralfx_frame.motion_handle) {
+            NeuralFxMotionComplete(neuralfx_frame.motion_handle);
+            std::lock_guard<std::mutex> lock(nfx_lock);
+            if (nfx_render_frame.motion_handle == neuralfx_frame.motion_handle) nfx_render_frame = {};
+        }
         SafeRelease(color); SafeRelease(mv); SafeRelease(depth); SafeRelease(mask);
         return; // never evaluate a stale frame or an auxiliary Present
     }
@@ -63,6 +68,7 @@ $nativeMvInjection = @'
             neuralfx_queue_at = neuralfx_queue_now;
             Log("[neuralfx] cola de salidas saturada: ninguna consulta de las 8 ha terminado; se conserva la escena actual");
         }
+        if (neuralfx_frame.motion_handle) NeuralFxMotionComplete(neuralfx_frame.motion_handle);
         { std::lock_guard<std::mutex> lock(nfx_lock); NeuralFxAbandonLocked(neuralfx_frame); }
         SafeRelease(color); SafeRelease(mv); SafeRelease(depth); SafeRelease(mask);
         return; // bounded queue: leave the current scene untouched
@@ -98,12 +104,13 @@ $body = Replace-Once $body '    if ((g.frames_done % 60) == 0 && CfgReload()) g.
         g_cfg.work_sharpness = 0;
     }
 '@
-$body = Replace-Once $body '    bool ok = true;' '    bool ok = neuralfx_motion_ok;'
+$body = Replace-Once $body '    bool ok = true;' '    bool ok = neuralfx_motion_ok && (!neuralfx_depth_frame || (neuralfx_depth_frame == neuralfx_frame.frame && neuralfx_motion.provider == 2));'
 $body = Replace-Once $body 'CopyOrResampleInputs(ctx, color, mv, depth, mask,' 'CopyOrResampleInputs(ctx, color, neuralfx_motion.texture, depth, mask,'
 $body = Replace-Once $body 'reinterpret_cast<ID3D11ShaderResourceView *>(mv_srv.handle),' 'neuralfx_motion.view,'
 $body = Replace-Once $body 'ep.InReset           = reset;' 'ep.InReset           = reset || NeuralFxResetNeeded(neuralfx_frame);'
 $body = Replace-Once $body 'ep.InMVScaleX        = g_cfg.mv_scale_x;' 'ep.InMVScaleX        = neuralfx_motion.scale_x;'
 $body = Replace-Once $body 'ep.InMVScaleY        = g_cfg.mv_scale_y;' 'ep.InMVScaleY        = neuralfx_motion.scale_y;'
+$body = Replace-Once $body 'ep.pInBiasCurrentColorMask = g.mask_ok ? g.tex12[SLOT_MASK] : nullptr;' 'ep.pInBiasCurrentColorMask = (g.mask_ok && neuralfx_motion.provider != 2) ? g.tex12[SLOT_MASK] : nullptr;'
 $body = Replace-Once $body 'AbortCommands();  // never execute a list NGX crashed while recording' ('AbortCommands();  // never execute a list NGX crashed while recording' + "`n                    NeuralFxRecorded(neuralfx_frame, static_cast<int32_t>(ecode), false, g.width, g.height, neuralfx_motion.provider);")
 $body = Replace-Once $body @'
             g.ctx4->Signal(g.fence11, v_in);
@@ -143,7 +150,20 @@ $body = Replace-Once $body ('                    g.ctx4->Wait(g.fence11, v_out);
                         FeedDisable("D3D11 result wait failed; restart the game");
                     }
 '@
-$body = Replace-Once $body ('    SafeRelease(color);' + "`n" + '    SafeRelease(mv);') ('    NeuralFxFinishOutput(neuralfx_output, neuralfx_frame, neuralfx_committed);' + "`n" + '    SafeRelease(color);' + "`n" + '    SafeRelease(mv);')
+$body = Replace-Once $body ('    SafeRelease(color);' + "`n" + '    SafeRelease(mv);') @'
+    if (neuralfx_committed) {
+        NeuralFxFinishOutput(neuralfx_output, neuralfx_frame, true);
+    } else {
+        if (neuralfx_frame.motion_handle) NeuralFxMotionComplete(neuralfx_frame.motion_handle);
+        if (neuralfx_output) {
+            SafeRelease(neuralfx_output->query);
+            SafeRelease(neuralfx_output->context);
+            *neuralfx_output = {};
+        }
+    }
+    SafeRelease(color);
+    SafeRelease(mv);
+'@
 $source = $source.Substring(0, $start) + $body + $source.Substring($end)
 $source = Replace-Once $source '    if (!g_cfg.enabled || g.disabled || g_cfg.mode == 0) return;' '    if (!NeuralFxEnabled() || !g_cfg.enabled || g.disabled || g_cfg.mode == 0) return;'
 $source = Replace-Once $source '    Log("[feed] %s", g_mv_probe);' @'
@@ -203,6 +223,32 @@ static void NeuralFxBeginEffects(reshade::api::effect_runtime* rt, reshade::api:
     if (active && rt == g.runtime && nfx_sharp_override > 0) {
         auto sharp = rt->find_uniform_variable("NeuralFX_CAS.fx", "Sharpening");
         if (sharp.handle) rt->set_uniform_value_float(sharp, &nfx_sharp_override, 1);
+    }
+    // The rectangle travels with the reserved MV slot, never with the next CPU frame.
+    NeuralFxFrameV3 depth_frame = {};
+    { std::lock_guard<std::mutex> lock(nfx_lock); depth_frame = nfx_render_frame; }
+    float depth_rect[4] = {};
+    bool depth_enabled = active && rt == g.runtime && g_cfg.work_resolution == 100 &&
+        NeuralFxReadMotionDepthRect(depth_frame, depth_rect);
+    auto depth_toggle = rt->find_uniform_variable("DLSS5_Feed.fx", "NFX_DepthRectEnabled");
+    auto depth_region = rt->find_uniform_variable("DLSS5_Feed.fx", "NFX_DepthSceneRect");
+    auto depth_size = rt->find_uniform_variable("DLSS5_Feed.fx", "NFX_DepthFrameSize");
+    depth_enabled = depth_enabled && depth_toggle.handle && depth_region.handle && depth_size.handle;
+    if (depth_toggle.handle) rt->set_uniform_value_bool(depth_toggle, &depth_enabled, 1);
+    if (depth_enabled) {
+        const float frame_size[2] = {float(depth_frame.width), float(depth_frame.height)};
+        rt->set_uniform_value_float(depth_region, depth_rect, 4);
+        rt->set_uniform_value_float(depth_size, frame_size, 2);
+    }
+    if (rt == g.runtime) {
+        static bool previous_depth = false;
+        static float previous_rect[4] = {};
+        if (depth_enabled != previous_depth || (depth_enabled && std::memcmp(depth_rect, previous_rect, sizeof(depth_rect)))) {
+            g.need_reset = true;
+            Log("[neuralfx] candidato terreno %s; rect %.0f,%.0f %.0fx%.0f; la correccion requiere profundidad de tamano camara", depth_enabled ? "habilitado" : "apagado", depth_rect[0], depth_rect[1], depth_rect[2], depth_rect[3]);
+            previous_depth = depth_enabled; std::memcpy(previous_rect, depth_rect, sizeof(depth_rect));
+        }
+        neuralfx_depth_frame = depth_enabled ? depth_frame.frame : 0;
     }
     static bool previous = false;
     if (rt == g.runtime && active != previous) { g.need_reset = true; previous = active; }
@@ -292,6 +338,13 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Motion fixture compilation failed.' }
     & .\build\motion-tests.exe
     if ($LASTEXITCODE -ne 0) { throw 'Motion descriptor fixture failed.' }
+    $depthSource = Join-Path $nativeRoot 'depth_rect_tests.cpp'
+    if ($vs) {
+        & cmd.exe /d /c ('call "' + $env:VCVARSALL + '" x64 && cl.exe /nologo /EHsc /W3 /std:c++20 /Fobuild/ /Febuild/depth-rect-tests.exe "' + $depthSource + '"')
+    } else { & cl.exe /nologo /EHsc /W3 /std:c++20 /Fobuild/ /Febuild/depth-rect-tests.exe $depthSource }
+    if ($LASTEXITCODE -ne 0) { throw 'Depth rect fixture compilation failed.' }
+    & .\build\depth-rect-tests.exe (Join-Path $nativeRoot 'shaders/NeuralFXDepthRect.fxh')
+    if ($LASTEXITCODE -ne 0) { throw 'Depth rect fixture failed.' }
     if ($SmokeHarness) {
         $smokeSource = Join-Path $nativeRoot 'smoke_host.cpp'
         if ($vs) {
@@ -305,6 +358,7 @@ try {
 finally { Pop-Location }
 $output = Join-Path $nativeRoot 'out'
 New-Item -ItemType Directory -Path $output -Force | Out-Null
+& (Join-Path $nativeRoot 'Build-FeedShader.ps1') -UpstreamRoot $upstreamRoot -OutputPath (Join-Path $output 'DLSS5_Feed.fx')
 Copy-Item -LiteralPath (Join-Path $upstreamRoot 'build/dlss5-feed.addon64') -Destination $output -Force
 if ($SmokeHarness) { Copy-Item -LiteralPath (Join-Path $upstreamRoot 'build/NeuralFX.Smoke.exe') -Destination $output -Force }
 Write-Output "Native artifact: $output/dlss5-feed.addon64"
@@ -313,7 +367,7 @@ $buildManifest = [ordered]@{
     sourceCommit = (& git -C (Split-Path -Parent $nativeRoot) rev-parse HEAD)
     bridgeBuild = 5; frameAbi = 3; frameBytes = 64; resultBytes = 80; healthBytes = 64; ipc = 4
     artifactSha256 = (Get-FileHash -LiteralPath (Join-Path $output 'dlss5-feed.addon64') -Algorithm SHA256).Hash.ToLowerInvariant()
-    supported = @('reset','session-control','registered-motion-experimental','work-resolution-control','cas-control','output-completion-query','pipeline-health')
+    supported = @('reset','session-control','registered-motion-experimental','work-resolution-control','cas-control','output-completion-query','pipeline-health','terrain-depth-candidate-toggle')
     unverified = @('unity-motion-sign-and-coverage','scene-depth-camera-match','pre-ui-composition','nr-per-frame-confirmation')
     unavailable = @('prepared-camera-jitter','unity-internal-sr','nr-only-same-frame-comparison','integrated-frame-generation')
 }

@@ -21,10 +21,11 @@ using NeuralFX.Hub.Services;
 // posicional. Buscar «el primer argumento que no empieza por guion» tomaba el valor de --addon
 // como carpeta del juego.
 string? requestedRoot = null, expectedAddon = null;
-bool onlyIfStale = false;
+bool onlyIfStale = false, cleanReinstall = false;
 for (int i = 0; i < args.Length; i++)
 {
     if (string.Equals(args[i], "--si-hace-falta", StringComparison.OrdinalIgnoreCase)) onlyIfStale = true;
+    else if (string.Equals(args[i], "--reinstalar", StringComparison.OrdinalIgnoreCase)) cleanReinstall = true;
     else if (string.Equals(args[i], "--addon", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length) expectedAddon = args[++i];
     else if (args[i].StartsWith('-')) { Console.Error.WriteLine("Opción desconocida: " + args[i]); return 1; }
     else if (requestedRoot is null) requestedRoot = args[i];
@@ -78,9 +79,8 @@ string installedAddon = Path.Combine(root, "dlss5-feed.addon64");
 string? before = Digest(installedAddon);
 string? wanted = expectedAddon is null ? null : Digest(expectedAddon);
 
-// El modo habitual desde package.ps1: no reescribir la instalación si ya coincide. Reinstalar
-// por costumbre mueve archivos, rota backups y no aporta nada.
-if (onlyIfStale && wanted is not null && before == wanted)
+// El modo opcional de refresco evita reescrituras; --reinstalar siempre hace el ciclo completo.
+if (!cleanReinstall && onlyIfStale && wanted is not null && before == wanted)
 {
     Console.WriteLine("El pipeline del juego ya tiene estos componentes; no se reinstala.");
     return 0;
@@ -89,14 +89,35 @@ if (onlyIfStale && wanted is not null && before == wanted)
 var manager = new DependencyManagerService();
 var items = manager.GetInitialDependencies();
 var preset = Enum.IsDefined(typeof(PipelinePreset), presetIndex) ? (PipelinePreset)presetIndex : PipelinePreset.Native;
+Dictionary<string, byte[]>? configuration = null;
+if (cleanReinstall)
+{
+    // Verify every required payload and preserve configuration before removing anything.
+    await manager.DownloadAllPublicMissingAsync(items, Console.WriteLine);
+    foreach (var item in items.Where(x => !x.IsEmbedded && (x.IsRequired || x.IsInCache)))
+        manager.ReadPayload(item);
+    configuration = PipelineConfiguration.Create(root, preset);
+    var plan = UninstallService.Inspect(root);
+    Console.WriteLine("Desinstalación completa mediante NeuralFX Hub: " + plan.Summary);
+    var removal = await new UninstallService().UninstallAsync(plan, Console.WriteLine);
+    if (!removal.Success) { Console.Error.WriteLine(removal.Message); return 7; }
+}
 Console.WriteLine($"Refrescando el pipeline en {root} · preset {preset}");
-if (!await new InstallationEngineService(manager).InstallAsync(root, items, Console.WriteLine, preset: preset))
+if (!await new InstallationEngineService(manager).InstallAsync(root, items, Console.WriteLine, preset: preset, preparedConfiguration: configuration))
 {
     Console.Error.WriteLine("La instalación no se completó. El estado anterior queda recuperable desde el Hub.");
     return 4;
 }
 
 string? after = Digest(installedAddon);
+var installedManifest = ManifestStore.Read(root);
+foreach (var file in installedManifest.FileChecksums)
+    if (Digest(ManagedPaths.Resolve(root, file.Key)) != file.Value)
+        throw new IOException("El archivo instalado no coincide con su manifiesto: " + file.Key);
+foreach (var item in items.Where(x => x.SourceType == "Bundled"))
+    foreach (var file in manager.ReadPayload(item))
+        if (Digest(ManagedPaths.Resolve(root, file.Key)) != DependencyManagerService.Hash(file.Value))
+            throw new IOException("El componente instalado no coincide con esta build: " + file.Key);
 if (after is null)
 {
     Console.Error.WriteLine("La instalación terminó pero no hay addon nativo en la carpeta del juego.");

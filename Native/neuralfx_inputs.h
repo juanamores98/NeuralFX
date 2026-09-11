@@ -17,6 +17,8 @@ struct NeuralFxMotionSlot {
     ID3D11ShaderResourceView* probed_view = nullptr;
     HRESULT probed_result = S_OK;
     uint64_t reserved_tick = 0;
+    bool depth_candidate = false;
+    float depth_rect[4] = {}; // x/y/width/height, top-left pixels, owned by this reservation
 };
 // Un turno que el consumidor nunca reclama caduca. Sin esto, tres fotogramas enviados durante
 // la carga -cuando la sesion D3D12 del feeder todavia no esta lista- se quedan reservados para
@@ -215,10 +217,34 @@ NFX_EXPORT int NFX_CALL NeuralFX_ReserveMotion(uint32_t handle) {
         // Se reclama el propio turno si caduco: el fotograma al que pertenecia ya no existe.
         if (slot.reserved && now - slot.reserved_tick < NFX_RESERVATION_TIMEOUT_MS) break;
         if (slot.reserved) ++nfx_reserve_expired;
-        slot.reserved = true; slot.reserved_tick = now; ++nfx_reserve_ok; return 1;
+        slot.reserved = true; slot.depth_candidate = false; slot.reserved_tick = now; ++nfx_reserve_ok; return 1;
     }
     ++nfx_reserve_denied;
     return 0;
+}
+NFX_EXPORT int NFX_CALL NeuralFX_SetMotionDepthRect(uint32_t handle, uint32_t enabled,
+    uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
+    if (!handle || enabled > 1) return 0;
+    std::lock_guard<std::mutex> lock(nfx_inputs_lock);
+    for (auto& slot : nfx_motion_slots) if (slot.handle == handle && slot.reserved && !slot.retiring) {
+        slot.depth_candidate = false;
+        D3D11_TEXTURE2D_DESC desc = {}; slot.texture->GetDesc(&desc);
+        if (!width || !height || width > desc.Width || height > desc.Height || x > desc.Width - width || y > desc.Height - height) return 0;
+        slot.depth_rect[0] = float(x); slot.depth_rect[1] = float(y);
+        slot.depth_rect[2] = float(width); slot.depth_rect[3] = float(height);
+        slot.depth_candidate = enabled != 0; return 1;
+    }
+    return 0;
+}
+static bool NeuralFxReadMotionDepthRect(const NeuralFxFrameV3& frame, float (&rect)[4]) {
+    std::lock_guard<std::mutex> lock(nfx_inputs_lock);
+    for (const auto& slot : nfx_motion_slots) if (frame.motion_handle && slot.handle == frame.motion_handle &&
+        slot.reserved && !slot.retiring && slot.depth_candidate && slot.camera == frame.camera && slot.epoch == frame.epoch) {
+        D3D11_TEXTURE2D_DESC desc = {}; slot.texture->GetDesc(&desc);
+        if (desc.Width != frame.width || desc.Height != frame.height) return false;
+        std::memcpy(rect, slot.depth_rect, sizeof(rect)); return true;
+    }
+    return false;
 }
 static void NeuralFxMotionComplete(uint32_t handle) {
     std::lock_guard<std::mutex> lock(nfx_inputs_lock);

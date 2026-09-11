@@ -143,6 +143,9 @@ namespace NeuralFX.Rendering
         private EnableDelegate _enable; private RegisterDelegate _register; private ReserveDelegate _reserve; private ReleaseDelegate _release, _cancel;
         private HealthDelegate _health;
         private RegistrationDelegate _registration;
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int DepthRectDelegate(uint handle, uint enabled, uint x, uint y, uint width, uint height);
+        private DepthRectDelegate _depthRect;
+        public bool SupportsTerrainCandidate { get { return _depthRect != null; } }
         public NativeCapabilities Capabilities { get; private set; }
         public string Reason { get; private set; }
         public IntPtr RenderEvent { get; private set; }
@@ -174,6 +177,7 @@ namespace NeuralFX.Rendering
             _getControls = (ControlsDelegate)Resolve(module, "NeuralFX_GetControls", typeof(ControlsDelegate));
             _health = (HealthDelegate)Resolve(module, "NeuralFX_GetHealth", typeof(HealthDelegate));
             _registration = (RegistrationDelegate)Resolve(module, "NeuralFX_GetRegistrationReport", typeof(RegistrationDelegate));
+            _depthRect = (DepthRectDelegate)Resolve(module, "NeuralFX_SetMotionDepthRect", typeof(DepthRectDelegate));
             RenderEvent = callback != null ? callback() : IntPtr.Zero;
             Capabilities = caps; Reason = Connected ? (_health != null ? "Puente ABI 3 build 5 con salida de salud; NR sin confirmar" : "Puente ABI 3 build 5; NR sin confirmar") : "Exports incompletos";
             return Connected;
@@ -183,6 +187,8 @@ namespace NeuralFX.Rendering
         public bool SetEnabled(bool enabled) { return Connected && _enable(enabled ? 1u : 0u) == 1; }
         public uint RegisterMotion(IntPtr texture, uint camera, uint epoch) { return Connected && _register != null ? _register(texture, camera, epoch) : 0; }
         public bool ReserveMotion(uint handle) { return Connected && _reserve != null && _reserve(handle) == 1; }
+        public bool SetMotionDepthRect(uint handle, bool enabled, int x, int y, int width, int height)
+        { return Connected && _depthRect != null && _depthRect(handle, enabled ? 1u : 0u, (uint)x, (uint)y, (uint)width, (uint)height) == 1; }
         public void CancelMotion(uint handle) { if (_cancel != null && handle != 0) _cancel(handle); }
         public void ReleaseMotion(uint handle) { if (_release != null && handle != 0) _release(handle); }
         public bool Submit(ref NativeFrame frame) { return Connected && _submit(ref frame, 64) == 1; }
