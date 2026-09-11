@@ -235,6 +235,35 @@ El fixture crea un segundo dispositivo WARP real y comprueba que ahí la prueba 
 
 Informe a **versión 5** (216 B), con el `HRESULT` de la prueba. Feeder a `0.15.1-neuralfx.12`.
 
+### La ruta de vectores de Unity entra
+
+```text
+movimiento=2 … [seleccion: usados · vista prestada al consumidor · nativos 2004 · al optico 0]
+flags=3583   (3327 + 256 NativeMotion)
+```
+
+**2.004 fotogramas servidos con vectores de Unity y ninguna caída al óptico.** Era la envoltura, como apuntaba el registro del feeder leído con la partida en marcha: un solo dispositivo D3D11 en el proceso —el privado que crea el feeder es **D3D12**, sobre el adaptador del juego— y `g.dev11` declarado `// not owned`. La prueba de capacidad resolvió lo que tres comprobaciones de identidad seguidas no pudieron.
+
+Cadena completa, por orden en que se fue cerrando cada eslabón: registro (familia tipeless) → turno (sin fuga) → selección (capacidad, no identidad).
+
+### La sonda de movimiento etiquetaba mal sus unidades
+
+```text
+MV probe: mean |mv| 0.053 px, max 0.05 px, 100% non-zero
+```
+
+La sonda promedia **tejels en crudo** y los llama píxeles. Eso es cierto para el camino óptico, que llega con `mv_scale=1.000` porque ya viene en píxeles. Los vectores de Unity son **deltas en UV**, y el frame los acompaña con escala 1920 × 967: ese `0,053` son **unos 100 px reales** repartidos por todo el centro, que es exactamente la firma de un paneo.
+
+Es decir, la sonda anunciaba «DLSS no está recibiendo vectores» justo cuando sí los estaba recibiendo, y estuve a punto de concluir de ahí que los vectores llegaban vacíos. Ahora aplica la escala del descriptor que de verdad se eligió ese frame, de modo que los dos caminos se leen en píxeles reales y son comparables entre sí.
+
+Feeder a `0.15.1-neuralfx.13`.
+
+### Lo que sigue sin acreditarse
+
+Que los vectores lleguen y se usen **no acredita que estén bien colocados ni bien orientados**. Siguen sin verificarse la geometría de origen y destino de la copia —se presupone que la textura de `BuiltinRenderTextureType.MotionVectors` mide lo que la cámara—, el signo, y la convención temporal. Eso es R3, y ahora por fin se puede medir: con la ruta activa, la sonda corregida y el paneo real, un desplazamiento medido que no case con el movimiento de la cámara lo delataría.
+
+Sigue pendiente también la reserva: **1.639 turnos negados frente a 1.549 concedidos** en la medida anterior. Tres huecos no cubren la latencia de la GPU.
+
 ### El despliegue deja de pedir un clic
 
 `tools/package.ps1 -Deploy` instalaba mod y Hub, pero el addon nativo de la carpeta del juego lo escribía solo el botón **Aplicar preset / reinstalar**. Tres entregas seguidas terminaron pidiéndole eso al usuario. `tools/NeuralFX.PipelineInstall` lo hace ahora por el **mismo motor transaccional** que el botón —no copiando archivos, que dejaría el manifiesto mintiendo—, respetando el ejecutable y el preset guardados, negándose si CS1 está abierto, y **verificando por hash lo que quedó escrito**. `-Deploy` lo invoca solo si el addon instalado no coincide con el construido.

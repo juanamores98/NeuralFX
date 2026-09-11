@@ -34,6 +34,11 @@ static std::atomic<uint32_t> nfx_select_reason{NFX_SEL_NO_HANDLE}, nfx_select_na
 static std::atomic<uint32_t> nfx_select_fw{0}, nfx_select_fh{0}, nfx_select_sw{0}, nfx_select_sh{0}, nfx_select_id{0};
 static std::atomic<uint32_t> nfx_select_match{0}, nfx_owner_luid_low{0}, nfx_device_luid_low{0};
 static std::atomic<int32_t> nfx_owner_luid_high{0}, nfx_device_luid_high{0}, nfx_select_probe{0};
+// Escala del descriptor elegido. La sonda de movimiento lee los tejels en crudo y los llama
+// «px»: eso solo es cierto para el camino optico, que ya viene en pixeles (mv_scale=1). Los
+// vectores de Unity son deltas en UV, asi que un 0,05 en crudo son ~100 px reales. Sin esto la
+// sonda dice «DLSS no esta recibiendo vectores» justo cuando si los esta recibiendo.
+static std::atomic<float> nfx_probe_scale_x{1.f}, nfx_probe_scale_y{1.f};
 // Identidad real del dispositivo, no identidad de puntero. ReShade envuelve ID3D11Device: el
 // recurso declara el dispositivo real y el contexto del addon puede entregar la envoltura, asi
 // que comparar punteros da un falso negativo. Se pregunta ademas por el objeto DXGI, que la
@@ -282,6 +287,7 @@ struct NeuralFxSelectedMotion {
                 break;
             }
         }
+        nfx_probe_scale_x.store(scale_x); nfx_probe_scale_y.store(scale_y);
         if (frame.motion_handle) {
             nfx_select_reason.store(reason);
             nfx_select_fw.store(frame.width); nfx_select_fh.store(frame.height);

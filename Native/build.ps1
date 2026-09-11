@@ -18,7 +18,7 @@ function Replace-Once([string]$Text, [string]$Before, [string]$After) {
     if (($Text.Split(@($Before), [StringSplitOptions]::None).Count - 1) -ne 1) { throw "Native patch marker missing or ambiguous: $Before" }
     return $Text.Replace($Before, $After)
 }
-$source = Replace-Once $source '#define FEED_VERSION "0.15.1"' ('#include "neuralfx_inputs.h"' + "`n" + 'static NeuralFxHealth neuralfx_health = { sizeof(NeuralFxHealth), 1 };' + "`n" + '#define FEED_VERSION "0.15.1-neuralfx.12"')
+$source = Replace-Once $source '#define FEED_VERSION "0.15.1"' ('#include "neuralfx_inputs.h"' + "`n" + 'static NeuralFxHealth neuralfx_health = { sizeof(NeuralFxHealth), 1 };' + "`n" + '#define FEED_VERSION "0.15.1-neuralfx.13"')
 $source = Replace-Once $source '    CK("queue Signal(fence12)");' @'
     CK("queue Signal(fence12)");
     if (FAILED(neuralfx_signal) || FAILED(g.dev12->GetDeviceRemovedReason()))
@@ -244,6 +244,12 @@ $source = Replace-Once $source '        reshade::register_event<reshade::addon_e
             }
         }
 '@)
+# La sonda de movimiento media en tejels crudos y los llamaba pixeles. Para el camino optico
+# coincide -mv_scale es 1-, pero los vectores de Unity son deltas en UV: un 0,05 en crudo son
+# ~100 px. Sin corregirlo, la sonda anunciaba "DLSS no esta recibiendo vectores" con la camara
+# en pleno paneo. Se aplica la escala del descriptor que de verdad se eligio ese frame.
+$source = Replace-Once $source '    double sum = 0.0, maxlen = 0.0;' ('    double sum = 0.0, maxlen = 0.0;' + "`n" + '    const double neuralfx_probe_sx = nfx_probe_scale_x.load(), neuralfx_probe_sy = nfx_probe_scale_y.load();')
+$source = Replace-Once $source '            const double len = sqrt(static_cast<double>(mx) * mx + static_cast<double>(my) * my);' ('            const double neuralfx_dx = static_cast<double>(mx) * neuralfx_probe_sx, neuralfx_dy = static_cast<double>(my) * neuralfx_probe_sy;' + "`n" + '            const double len = sqrt(neuralfx_dx * neuralfx_dx + neuralfx_dy * neuralfx_dy);')
 $source = Replace-Once $source '        reshade::unregister_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' ('        reshade::unregister_event<reshade::addon_event::reshade_render_technique>(OnRenderTechnique);' + "`n" + '        reshade::unregister_event<reshade::addon_event::reshade_begin_effects>(NeuralFxBeginEffects);' + "`n" + '        reshade::unregister_event<reshade::addon_event::reshade_finish_effects>(NeuralFxFinishEffects);')
 Set-Content -LiteralPath (Join-Path $upstreamRoot 'src/dlss5-feed.cpp') -Value $source -Encoding utf8
 Get-ChildItem -LiteralPath $nativeRoot -Filter 'neuralfx_*.h' | Copy-Item -Destination (Join-Path $upstreamRoot 'src') -Force
