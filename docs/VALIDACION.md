@@ -258,11 +258,26 @@ Es decir, la sonda anunciaba «DLSS no está recibiendo vectores» justo cuando 
 
 Feeder a `0.15.1-neuralfx.13`.
 
+### El turno que nadie reclama mata la ruta
+
+La sesión siguiente volvió al óptico, y el contador dice exactamente por qué:
+
+```text
+(Unity: sin enviar: turnos 3 en vuelo de 3 · concedidos 3 · negados 4803 · devueltos 0)
+[seleccion: el frame no llevaba handle · nativos 0 · al optico 0]
+```
+
+Tres turnos concedidos **al principio**, ninguno devuelto, 4.803 negaciones después. La sesión anterior, con el mismo código, terminó en `concedidos 2878 · devueltos 2875`. La diferencia es el momento: los primeros fotogramas se envían mientras la sesión D3D12 del feeder todavía se está montando (`create_delay=60`, `warmup_rebuild=180`), el add-on no los consume, y sus turnos quedan reservados **para siempre**. Con tres huecos, eso mata la ruta el resto de la partida. Que la sesión anterior funcionara fue suerte de arranque, no corrección.
+
+Los turnos caducan ahora a los 2 s: mucho más que cualquier fotograma (20 ms) y mucho menos que una partida, así que no puede reclamar uno que esté de verdad en vuelo. El informe cuenta cuántos se reclamaron por caducidad, para que una fuga no vuelva a esconderse detrás de un número que parece sano.
+
+**Esto no está verificado en ciudad.** El fixture comprueba que un turno caducado se reclama y que uno recién reservado no; el resto es razonamiento sobre la medida. Feeder a `0.15.1-neuralfx.14`.
+
 ### Lo que sigue sin acreditarse
 
 Que los vectores lleguen y se usen **no acredita que estén bien colocados ni bien orientados**. Siguen sin verificarse la geometría de origen y destino de la copia —se presupone que la textura de `BuiltinRenderTextureType.MotionVectors` mide lo que la cámara—, el signo, y la convención temporal. Eso es R3, y ahora por fin se puede medir: con la ruta activa, la sonda corregida y el paneo real, un desplazamiento medido que no case con el movimiento de la cámara lo delataría.
 
-Sigue pendiente también la reserva: **1.639 turnos negados frente a 1.549 concedidos** en la medida anterior. Tres huecos no cubren la latencia de la GPU.
+Sigue pendiente la **profundidad de la reserva**: incluso con los turnos devueltos, se niegan más de los que se conceden (3.744 frente a 2.878 en la mejor sesión). Tres huecos no cubren la latencia de la GPU, de modo que la ruta cubre alrededor de la mitad de los fotogramas. Eso se decide midiendo, no agrandando la tabla a ojo.
 
 ### El despliegue deja de pedir un clic
 

@@ -44,7 +44,7 @@ public class NativeContractTests
         public uint MipLevels, ArraySize, SampleCount, SampleQuality;
         public uint BindFlags, MiscFlags, Usage, CpuAccess, FromView;
         public uint SlotsUsed, SlotsTotal, Accepted, Rejected;
-        public uint ReservedNow, ReserveOk, ReserveDenied, Completed;
+        public uint ReservedNow, ReserveOk, ReserveDenied, Completed, ReserveExpired;
         public uint SelectReason, SelectNative, SelectFallback;
         public uint SelectFrameWidth, SelectFrameHeight, SelectSlotWidth, SelectSlotHeight, SelectIdentity;
         public uint SelectDeviceMatch;

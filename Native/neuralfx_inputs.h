@@ -16,7 +16,16 @@ struct NeuralFxMotionSlot {
     ID3D11Device* probed = nullptr;
     ID3D11ShaderResourceView* probed_view = nullptr;
     HRESULT probed_result = S_OK;
+    uint64_t reserved_tick = 0;
 };
+// Un turno que el consumidor nunca reclama caduca. Sin esto, tres fotogramas enviados durante
+// la carga -cuando la sesion D3D12 del feeder todavia no esta lista- se quedan reservados para
+// siempre, los tres huecos se agotan y la ruta muere en silencio el resto de la partida. Medido
+// asi: concedidos 3, devueltos 0, negados 4803.
+//
+// Dos segundos es mucho mas que cualquier frame (20 ms) y mucho menos que una partida, asi que
+// no puede reclamar un turno que este de verdad en vuelo.
+static constexpr uint64_t NFX_RESERVATION_TIMEOUT_MS = 2000;
 static std::mutex nfx_inputs_lock;
 static NeuralFxMotionSlot nfx_motion_slots[16];
 static uint32_t nfx_next_handle = 0;
@@ -26,7 +35,7 @@ static void NeuralFxReleaseSlot(NeuralFxMotionSlot& slot) {
     if (slot.texture) slot.texture->Release();
     slot = {};
 }
-static std::atomic<uint32_t> nfx_reserve_ok{0}, nfx_reserve_denied{0}, nfx_motion_completed{0};
+static std::atomic<uint32_t> nfx_reserve_ok{0}, nfx_reserve_denied{0}, nfx_motion_completed{0}, nfx_reserve_expired{0};
 // Estado del selector. Atomicos sueltos y no una estructura con candado: esto se escribe en el
 // camino de render de cada frame, y una lectura con dos campos de instantes distintos es un
 // precio aceptable por no meter un candado ahi.
@@ -64,7 +73,7 @@ static uint32_t NeuralFxDeviceMatch(ID3D11Device* owner, ID3D11Device* consumer,
     return match;
 }
 static std::mutex nfx_report_lock;
-static NeuralFxRegistrationReport nfx_report = {sizeof(NeuralFxRegistrationReport), 5};
+static NeuralFxRegistrationReport nfx_report = {sizeof(NeuralFxRegistrationReport), 6};
 // El informe guarda el ÚLTIMO intento, y además cuenta cuántas veces ocurrió cada motivo. Lo
 // primero sirve para diagnosticar; lo segundo, para no confundir un tropiezo aislado con un
 // rechazo sistemático, que es una distinción que el registro de sesión no podía hacer.
@@ -72,7 +81,7 @@ static void NeuralFxPublishRegistration(uint32_t stage, uint32_t reason, HRESULT
     uint32_t camera, uint32_t epoch, const D3D11_TEXTURE2D_DESC* desc, bool from_view, uint32_t used) {
     std::lock_guard<std::mutex> lock(nfx_report_lock);
     NeuralFxRegistrationReport next = {};
-    next.size = sizeof(next); next.version = 5;
+    next.size = sizeof(next); next.version = 6;
     next.request_serial = nfx_report.request_serial + 1;
     next.stage = stage; next.reason = reason; next.hresult = static_cast<int32_t>(hr);
     next.camera = camera; next.epoch = epoch; next.from_view = from_view ? 1u : 0u;
@@ -102,6 +111,7 @@ NFX_EXPORT int NFX_CALL NeuralFX_GetRegistrationReport(NeuralFxRegistrationRepor
     out->reserve_ok = nfx_reserve_ok.load();
     out->reserve_denied = nfx_reserve_denied.load();
     out->completed = nfx_motion_completed.load();
+    out->reserve_expired = nfx_reserve_expired.load();
     uint32_t reserved = 0, used = 0;
     {
         std::lock_guard<std::mutex> lock(nfx_inputs_lock);
@@ -198,8 +208,15 @@ NFX_EXPORT uint32_t NFX_CALL NeuralFX_RegisterMotion(void* pointer, uint32_t cam
     view->Release(); texture->Release(); return 0;
 }
 NFX_EXPORT int NFX_CALL NeuralFX_ReserveMotion(uint32_t handle) {
+    if (!handle) { ++nfx_reserve_denied; return 0; }
     std::lock_guard<std::mutex> lock(nfx_inputs_lock);
-    for (auto& slot : nfx_motion_slots) if (slot.handle == handle && handle && !slot.reserved && !slot.retiring) { slot.reserved = true; ++nfx_reserve_ok; return 1; }
+    const uint64_t now = NeuralFxNow();
+    for (auto& slot : nfx_motion_slots) if (slot.handle == handle && !slot.retiring) {
+        // Se reclama el propio turno si caduco: el fotograma al que pertenecia ya no existe.
+        if (slot.reserved && now - slot.reserved_tick < NFX_RESERVATION_TIMEOUT_MS) break;
+        if (slot.reserved) ++nfx_reserve_expired;
+        slot.reserved = true; slot.reserved_tick = now; ++nfx_reserve_ok; return 1;
+    }
     ++nfx_reserve_denied;
     return 0;
 }

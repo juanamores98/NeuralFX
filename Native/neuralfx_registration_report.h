@@ -76,6 +76,7 @@ struct NeuralFxRegistrationReport {
     uint32_t reserve_ok;          // reservas concedidas desde el arranque
     uint32_t reserve_denied;      // reservas negadas: el turno seguia ocupado
     uint32_t completed;           // devoluciones por trabajo GPU terminado o cancelacion
+    uint32_t reserve_expired;     // turnos reclamados por caducidad: nadie los reclamo nunca
     // Version 3. Registrar el recurso y conseguir turno tampoco basta: el selector del addon
     // vuelve a comprobarlo todo contra el frame, y si algo no cuadra cae al descriptor optico
     // sin decir que. Aqui queda dicho.
@@ -96,9 +97,9 @@ struct NeuralFxRegistrationReport {
     uint32_t counts[NFX_REG_REASON_COUNT];  // cuántas veces cada motivo, desde el arranque
 };
 #pragma pack(pop)
-static_assert(sizeof(NeuralFxRegistrationReport) == 216);
+static_assert(sizeof(NeuralFxRegistrationReport) == 220);
 static_assert(offsetof(NeuralFxRegistrationReport, reason) == 16);
 static_assert(offsetof(NeuralFxRegistrationReport, reserved_now) == 96);
-static_assert(offsetof(NeuralFxRegistrationReport, select_reason) == 112);
-static_assert(offsetof(NeuralFxRegistrationReport, select_device_match) == 144);
-static_assert(offsetof(NeuralFxRegistrationReport, counts) == 168);
+static_assert(offsetof(NeuralFxRegistrationReport, select_reason) == 116);
+static_assert(offsetof(NeuralFxRegistrationReport, select_device_match) == 148);
+static_assert(offsetof(NeuralFxRegistrationReport, counts) == 172);

@@ -46,7 +46,7 @@ static ID3D11Texture2D* Shaped(ID3D11Device* device, DXGI_FORMAT format, UINT mi
 static NeuralFxRegistrationReport Report() {
     NeuralFxRegistrationReport report={};
     assert(NeuralFX_GetRegistrationReport(&report,sizeof(report))==1);
-    assert(report.size==sizeof(report)&&report.version==5);
+    assert(report.size==sizeof(report)&&report.version==6);
     return report;
 }
 // Recorre el registro real, no un doble que siempre acepta. Un cero debe llevar SIEMPRE un
@@ -127,11 +127,18 @@ static void Registration(ID3D11Device* device) {
     assert(NeuralFX_ReserveMotion(handle));
     auto busy=Report();
     assert(busy.reserved_now==before.reserved_now+1&&busy.reserve_ok==before.reserve_ok+1);
-    assert(!NeuralFX_ReserveMotion(handle)); // el mismo turno no se concede dos veces
+    assert(!NeuralFX_ReserveMotion(handle)); // el mismo turno no se concede dos veces mientras viva
     assert(Report().reserve_denied==before.reserve_denied+1);
+    // Y caduca si nadie lo reclama: tres fotogramas enviados durante la carga dejaban los tres
+    // huecos pillados para siempre y la ruta moria el resto de la partida.
+    for (auto& slot : nfx_motion_slots) if (slot.handle == handle) slot.reserved_tick -= NFX_RESERVATION_TIMEOUT_MS + 1;
+    assert(NeuralFX_ReserveMotion(handle));
+    assert(Report().reserve_expired==before.reserve_expired+1);
     NeuralFX_CancelMotion(handle);
     auto freed=Report();
     assert(freed.reserved_now==before.reserved_now&&freed.completed==before.completed+1);
+    assert(NeuralFX_ReserveMotion(handle)&&!NeuralFX_ReserveMotion(handle)); // recien reservado no caduca
+    NeuralFX_CancelMotion(handle);
     NeuralFX_ReleaseMotion(handle);
 
     // El selector tambien rechazaba por cinco condiciones con un solo silencio. Cada una debe

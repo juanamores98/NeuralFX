@@ -52,7 +52,7 @@ namespace NeuralFX.Rendering
         public uint MipLevels, ArraySize, SampleCount, SampleQuality;
         public uint BindFlags, MiscFlags, Usage, CpuAccess, FromView;
         public uint SlotsUsed, SlotsTotal, Accepted, Rejected;
-        public uint ReservedNow, ReserveOk, ReserveDenied, Completed;
+        public uint ReservedNow, ReserveOk, ReserveDenied, Completed, ReserveExpired;
         public uint SelectReason, SelectNative, SelectFallback;
         public uint SelectFrameWidth, SelectFrameHeight, SelectSlotWidth, SelectSlotHeight, SelectIdentity;
         public uint SelectDeviceMatch;
@@ -64,7 +64,8 @@ namespace NeuralFX.Rendering
         public string DescribeSlots()
         {
             return "turnos " + ReservedNow + " en vuelo de " + SlotsUsed + " registrados · concedidos " +
-                ReserveOk + " · negados " + ReserveDenied + " · devueltos " + Completed;
+                ReserveOk + " · negados " + ReserveDenied + " · devueltos " + Completed +
+                (ReserveExpired != 0 ? " · caducados " + ReserveExpired : "");
         }
         /// <summary>Por que el selector del addon no uso los vectores registrados.</summary>
         public string DescribeSelection()
@@ -205,7 +206,7 @@ namespace NeuralFX.Rendering
             // que no hay informe, en vez de leer memoria con otra forma.
             var data = new NativeRegistrationReport();
             uint bytes = (uint)Marshal.SizeOf(typeof(NativeRegistrationReport));
-            return _registration != null && _registration(ref data, bytes) == 1 && data.Version == 5 ? data : new NativeRegistrationReport();
+            return _registration != null && _registration(ref data, bytes) == 1 && data.Version == 6 ? data : new NativeRegistrationReport();
         }
         public NativeResult ReadResult()
         {
