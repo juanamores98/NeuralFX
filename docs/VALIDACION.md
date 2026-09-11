@@ -97,7 +97,19 @@ Sin profundidad el pase neural no tiene con qué resolver las desoclusiones, que
 
 ### Lo que sí está sano
 
-`backend=0x00000000` en las 91 entradas. 18 resets solicitados y 18 completados. Media de 39,1 fps con máximo de 50,6, y el coste del feeder entre 15 y 17 ms de GPU. El usuario informa que el arrastre al mover la cámara ya no se aprecia con facilidad.
+`backend=0x00000000` en las 91 entradas. 18 resets solicitados y 18 completados. Media de 39,1 fps con máximo de 50,6, y el coste del feeder entre 15 y 17 ms de GPU. El usuario informa que el arrastre al mover la cámara ya no se aprecia con facilidad, pero **esa mejora no es atribuible a ningún cambio de esta entrega**: el pipeline corrió idéntico en las cuatro sesiones (`movimiento=1` en todas), y la sesión que se percibió mejor es precisamente la de peor profundidad. Se anota como percepción, no como resultado.
+
+### Cierre del desarrollo
+
+Se intentó la comprobación manual del selector de profundidad desde el menú de ReShade —abrir el overlay en ciudad, mirar la lista de candidatos de `generic_depth` y forzar uno— y **no se pudo completar**. La hipótesis de la sección anterior queda por tanto **sin probar**: no está confirmada ni descartada, y nadie debe darla por cerrada.
+
+Lo verificado sobre la instalación, que sigue siendo válido como punto de partida:
+
+- ReShade 6.8 lleva `generic_depth` incorporado en `dxgi.dll`; no hay `generic_depth.addon64` suelto en la carpeta del juego. Los add-ons instalados son `dlss5-feed.addon64` y `renodx-dlss5.addon64`.
+- Las seis claves que ese runtime lee de `[DEPTH]` son `DepthCopyAtClearIndex`, `DepthCopyBeforeClears`, `DisableINTZ`, `DrawStatsHeuristic`, `FilterFormat` y `UseAspectRatioHeuristics`. El instalador escribe cuatro; **`DepthCopyAtClearIndex` y `DisableINTZ` no se fijan**, de modo que la elección del búfer queda a la heurística de estadísticas de dibujo en cada fotograma.
+- No existe clave que persista un búfer forzado: la selección del overlay es por sesión, porque el identificador del recurso no es estable entre arranques. Cualquier arreglo tiene que pasar por esas seis claves.
+
+Para el registro de vectores de movimiento, la vía propuesta y no ejecutada es una sola recompilación nativa que haga dos cosas: pedir el tipo del puntero con `QueryInterface` en vez del `static_cast<ID3D11Texture2D*>` ciego de `Native/neuralfx_inputs.h` —Unity puede entregar ahí la vista y no el recurso, lo que explicaría un rechazo constante sin caída— y contar por separado los ocho motivos de rechazo. Ninguna de las dos se llegó a escribir.
 
 ## Pendientes
 
