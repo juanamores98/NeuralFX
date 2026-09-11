@@ -77,6 +77,8 @@ Compilar el Hub o ejecutar las pruebas **no** despliega nada. Para evitarlo tamb
 
 Esto **no** sustituye a la entrega real. Desplegar solo el mod puede dejarlo por delante del puente instalado; si los contratos no coinciden el mod entra en bypass y lo indica en su estado. Para actualizar mod, Hub y addon nativo juntos, con hashes y copias de seguridad, sigue siendo `tools/package.ps1 -Deploy`.
 
+`-Deploy` instala el mod y el Hub y, a continuación, **refresca el pipeline del juego** si el addon nativo construido no es el que está instalado. Ese refresco usa el mismo motor transaccional que el botón **Aplicar preset / reinstalar** del Hub —con su diario, sus copias y su manifiesto—, respeta el ejecutable y el preset guardados en `hub-settings.json`, y comprueba por hash lo que quedó escrito. Antes había que abrir el Hub y pulsar ese botón a mano cada vez que cambiaba el addon. Necesita CS1 cerrado. `-SkipPipelineRefresh` lo omite; `tools/NeuralFX.PipelineInstall` se puede ejecutar por separado, opcionalmente con la carpeta del juego como argumento.
+
 ```powershell
 ./tools/Build-NeuralFX.ps1 -ManagedDLLPath 'D:\Steam\steamapps\common\Cities_Skylines\Cities_Data\Managed' -Package
 ```

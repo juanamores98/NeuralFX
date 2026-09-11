@@ -1,4 +1,4 @@
-param([switch]$Deploy, [switch]$SkipNativeBuild, [string]$ManagedDLLPath)
+param([switch]$Deploy, [switch]$SkipNativeBuild, [string]$ManagedDLLPath, [switch]$SkipPipelineRefresh)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $taskRoot
@@ -34,6 +34,19 @@ try {
     Compress-Archive -LiteralPath $package -DestinationPath ($package + '.zip')
     if ($Deploy) {
         & (Join-Path $package 'Install-NeuralFX.ps1')
+        if ($LASTEXITCODE -ne 0) { throw 'Package install failed.' }
+        # Install-NeuralFX solo pone el mod y el Hub. El addon nativo de la carpeta del juego
+        # lo escribia unicamente el boton del Hub, asi que cada cambio del addon terminaba en
+        # "abre el Hub y pulsa reinstalar". Aqui se refresca por el mismo camino transaccional,
+        # y solo si de verdad hace falta.
+        if (!$SkipPipelineRefresh) {
+            & dotnet build tools/NeuralFX.PipelineInstall/NeuralFX.PipelineInstall.csproj -c Release @managedArgs --nologo -v:q
+            if ($LASTEXITCODE -ne 0) { throw 'Pipeline installer build failed.' }
+            # Se invoca el ejecutable, no "dotnet run": ese reenvia sus propias opciones al
+            # programa y la primera version se trago un --nologo como si fuera argumento.
+            & 'tools/NeuralFX.PipelineInstall/bin/Release/net8.0-windows/NeuralFX.PipelineInstall.exe' --si-hace-falta --addon 'Native/out/dlss5-feed.addon64'
+            if ($LASTEXITCODE -ne 0) { throw "Pipeline refresh failed ($LASTEXITCODE). El estado anterior sigue recuperable desde el Hub." }
+        }
     }
     Write-Output "Package: $package.zip"
 } finally { Pop-Location }
